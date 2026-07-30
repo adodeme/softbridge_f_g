@@ -1,0 +1,123 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\Subscription;
+use App\Models\License;
+use App\Models\User;
+use App\Models\Notification;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+
+class PaymentController extends Controller
+{
+    public function initiate(Request $request)
+    {
+        $request->validate(['invoice_id' => 'required|exists:invoices,id']);
+        $invoice = Invoice::with('client.user')->findOrFail($request->invoice_id);
+
+        if ($invoice->client_id !== Auth::user()->client->id) {
+            return response()->json(['error' => 'Action non autorisée.'], 403);
+        }
+        if ($invoice->statut === 'paye') {
+            return response()->json(['error' => 'Cette facture est déjà payée.'], 422);
+        }
+
+        // Appel à l'API FedaPay
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . env('FEDAPAY_SECRET_KEY')
+        ])->post('https://api.fedapay.com/v1/transactions', [
+            'amount' => $invoice->montant,
+            'currency' => 'XOF',
+            'description' => 'Facture #' . $invoice->numero,
+            'callback_url' => env('APP_URL') . '/api/webhooks/fedapay',
+            'metadata' => ['invoice_id' => $invoice->id]
+        ]);
+
+        if ($response->failed()) {
+            return response()->json(['error' => 'Erreur de communication avec FedaPay.'], 500);
+        }
+
+        return response()->json(['payment_url' => $response->json()['url']]);
+    }
+
+    public function handleWebhook(Request $request)
+    {
+        $payload = $request->all();
+
+        // Vérification de base du statut (pour la production, vous devez vérifier la signature HMAC)
+        if (isset($payload['status']) && $payload['status'] === 'completed') {
+            $invoice = Invoice::findOrFail($payload['metadata']['invoice_id']);
+            if ($invoice->statut === 'paye') {
+                return response('Déjà traité', 200);
+            }
+
+            $invoice->statut = 'paye';
+            $invoice->save();
+
+            // Enregistrement du paiement
+            Payment::create([
+                'invoice_id' => $invoice->id,
+                'montant' => $invoice->montant,
+                'date_paiement' => now(),
+                'methode' => 'Fedapay',
+                'reference_fedapay' => $payload['id'] ?? null
+            ]);
+
+            // Si c'est un abonnement, on crée la licence
+            if ($invoice->type === 'abonnement') {
+                $subscription = Subscription::where('client_id', $invoice->client_id)
+                                            ->where('statut', 'active')
+                                            ->latest()
+                                            ->first();
+
+                if ($subscription) {
+                    // Génération de la clé de licence
+                    $uniqueKey = Str::uuid();
+                    $license = License::create([
+                        'software_id' => $subscription->license->software_id,
+                        'key' => $uniqueKey,
+                        'status' => 'active',
+                        'type' => $subscription->license->type,
+                        'duree' => $subscription->license->duree,
+                        'prix' => $subscription->license->prix
+                    ]);
+
+                    // Mise à jour de l'abonnement avec la nouvelle licence
+                    $subscription->license_id = $license->id;
+                    $subscription->save();
+
+                    // La clé d'accès est stockée dans la facture (chiffrée via le modèle)
+                    $invoice->cle_acces = $uniqueKey;
+                    $invoice->save();
+                }
+            }
+
+            // Notification au client
+            Notification::create([
+                'user_id' => $invoice->client->user->id,
+                'message' => "Paiement confirmé pour la facture {$invoice->numero}.",
+                'date_envoi' => now(),
+                'lu' => false
+            ]);
+            // Dans handleWebhook, après validation du paiement
+            $license = License::create([
+                'software_id' => $subscription->license->software_id,
+                'key' => $uniqueKey,
+                'status' => 'active', // On force 'active' car le paiement est confirmé
+                'type' => $subscription->license->type,
+                'duree' => $subscription->license->duree,
+                'prix' => $subscription->license->prix
+            ]);
+
+            return response('Webhook traité avec succès', 200);
+        }
+
+        return response('Webhook ignoré', 200);
+    }
+}

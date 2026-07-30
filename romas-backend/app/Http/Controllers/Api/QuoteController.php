@@ -1,0 +1,164 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Quote;
+use App\Models\Project;
+use App\Models\Invoice;
+use App\Models\User;
+use App\Models\Notification;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class QuoteController extends Controller
+{
+    public function index()
+    {
+        $user = Auth::user();
+        if ($user->role === 'client') {
+            return response()->json($user->client->quotes()->with('client.user', 'project')->get());
+        }
+        return response()->json(Quote::with('client.user', 'project')->get());
+    }
+
+    public function show($id)
+    {
+        return response()->json(Quote::with('client.user', 'project')->findOrFail($id));
+    }
+
+    public function store(Request $request)
+    {
+        // Sécurité manuelle : seul le Chef de Projet est autorisé à créer un devis
+        if (Auth::user()->role !== 'chef_projet') {
+            return response()->json(['message' => 'Accès refusé. Seul le Chef de Projet peut créer un devis.'], 403);
+        }
+
+        $request->validate([
+            'client_id' => 'required|exists:clients,id',
+            'besoins' => 'required|string',
+            'fonctionnalites' => 'required|array',
+            'montant' => 'required|numeric'
+        ]);
+        $quote = Quote::create($request->all() + ['statut' => 'en_attente']);
+        return response()->json($quote, 201);
+    }
+
+    public function update(Request $request, Quote $quote)
+    {
+        if ($quote->statut !== 'en_attente') {
+            return response()->json(['error' => 'Ce devis ne peut plus être modifié.'], 403);
+        }
+        $quote->update($request->only(['besoins', 'fonctionnalites', 'montant']));
+        return response()->json($quote);
+    }
+
+    public function destroy(Quote $quote)
+    {
+        if ($quote->statut === 'valide') {
+            return response()->json(['error' => 'Impossible de supprimer un devis validé.'], 403);
+        }
+        $quote->delete();
+        return response()->json(['message' => 'Devis supprimé.']);
+    }
+
+    public function send($id)
+    {
+        $quote = Quote::with('client.user')->findOrFail($id);
+        $quote->statut = 'envoye';
+        $quote->save();
+
+        foreach (User::where('role', 'administrateur')->get() as $admin) {
+            Notification::create(['user_id' => $admin->id, 'message' => "Le devis #{$quote->id} a été envoyé.", 'date_envoi' => now(), 'lu' => false]);
+        }
+        Notification::create(['user_id' => $quote->client->user_id, 'message' => "Vous avez reçu un nouveau devis.", 'date_envoi' => now(), 'lu' => false]);
+
+        return response()->json(['message' => 'Devis envoyé avec succès.']);
+    }
+
+    public function validateQuote($id)
+    {
+        $quote = Quote::findOrFail($id);
+        if ($quote->client_id !== Auth::user()->client->id) {
+            return response()->json(['error' => 'Action non autorisée.'], 403);
+        }
+        if ($quote->statut !== 'envoye') {
+            return response()->json(['error' => 'Ce devis ne peut pas être validé.'], 403);
+        }
+
+        $quote->statut = 'valide';
+        $quote->save();
+
+        foreach (User::where('role', 'chef_projet')->get() as $chef) {
+            Notification::create(['user_id' => $chef->id, 'message' => "Le client a validé le devis #{$quote->id}.", 'date_envoi' => now(), 'lu' => false]);
+        }
+
+        return response()->json(['message' => 'Devis validé avec succès.']);
+    }
+
+    public function convertToInvoice($id)
+    {
+        $quote = Quote::with('client')->findOrFail($id);
+        if ($quote->statut !== 'valide') {
+            return response()->json(['error' => 'Seul un devis validé peut être converti.'], 422);
+        }
+
+        $project = Project::create([
+            'client_id' => $quote->client_id,
+            'nom' => 'Projet ' . $quote->client->nom_entreprise,
+            'description' => $quote->besoins, // ← AJOUT : reprend les besoins du devis
+            'statut' => 'en_cours'
+        ]);
+        $quote->project_id = $project->id;
+        $quote->statut = 'termine'; // ← Empêche toute nouvelle conversion
+        $quote->save();
+
+        $invoice = Invoice::create([
+            'client_id' => $quote->client_id,
+            'project_id' => $project->id,
+            'numero' => 'FAC-DEV-' . uniqid(),
+            'date_creation' => now(),
+            'montant' => $quote->montant,
+            'statut' => 'impaye',
+            'type' => 'devis'
+        ]);
+
+        Notification::create([
+            'user_id' => $quote->client->user_id,
+            'message' => "Votre projet et votre facture ont été créés.",
+            'date_envoi' => now(),
+            'lu' => false
+        ]);
+
+        return response()->json([
+            'message' => 'Devis converti avec succès.',
+            'project' => $project,
+            'invoice' => $invoice
+        ]);
+    }
+    public function rejectQuote($id)
+    {
+        $quote = Quote::findOrFail($id);
+        if ($quote->client_id !== Auth::user()->client->id) {
+            return response()->json(['error' => 'Action non autorisée.'], 403);
+        }
+        if ($quote->statut !== 'envoye') {
+            return response()->json(['error' => 'Ce devis ne peut pas être refusé.'], 403);
+        }
+
+        $quote->statut = 'refuse';
+        $quote->save();
+
+        // Notification aux chefs de projet
+        foreach (User::where('role', 'chef_projet')->get() as $chef) {
+            Notification::create([
+                'user_id' => $chef->id,
+                'message' => "Le client a refusé le devis #{$quote->id}.",
+                'date_envoi' => now(),
+                'lu' => false
+            ]);
+        }
+
+        return response()->json(['message' => 'Devis refusé.']);
+    }
+}

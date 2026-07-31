@@ -11,7 +11,9 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // --- Administrateur de test (désactivé pour éviter les conflits) ---
+        // --- Utilisateurs de test (désactivés si nécessaire) ---
+
+        // Admin de test (désactivé pour éviter les conflits)
         // User::updateOrCreate(
         //     ['email' => 'admin@softbridge.com'],
         //     [
@@ -22,7 +24,7 @@ class DatabaseSeeder extends Seeder
         //     ]
         // );
 
-        // 2. Chef de Projet
+        // Chef de Projet
         User::updateOrCreate(
             ['email' => 'chef@softbridge.com'],
             [
@@ -33,7 +35,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // 3. Client
+        // Client
         $userClient = User::updateOrCreate(
             ['email' => 'client@softbridge.com'],
             [

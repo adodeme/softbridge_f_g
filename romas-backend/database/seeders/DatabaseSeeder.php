@@ -11,18 +11,16 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // --- Utilisateurs de test (updateOrCreate pour éviter les doublons en redéploiement) ---
-
-        // 1. Administrateur de test (ne sera pas utilisé si un admin principal est défini)
-        User::updateOrCreate(
-            ['email' => 'admin@softbridge.com'],
-            [
-                'nom' => 'Super',
-                'prenom' => 'Admin',
-                'password' => Hash::make('password'),
-                'role' => 'administrateur'
-            ]
-        );
+        // --- Administrateur de test (désactivé pour éviter les conflits) ---
+        // User::updateOrCreate(
+        //     ['email' => 'admin@softbridge.com'],
+        //     [
+        //         'nom' => 'Super',
+        //         'prenom' => 'Admin',
+        //         'password' => Hash::make('password'),
+        //         'role' => 'administrateur'
+        //     ]
+        // );
 
         // 2. Chef de Projet
         User::updateOrCreate(

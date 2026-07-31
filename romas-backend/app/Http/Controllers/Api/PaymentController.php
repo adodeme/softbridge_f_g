@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
-    public function initiate(Request $request)
+    public function simulatePayment(Request $request)
     {
         $request->validate(['invoice_id' => 'required|exists:invoices,id']);
         $invoice = Invoice::with('client.user')->findOrFail($request->invoice_id);
@@ -28,22 +28,57 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Cette facture est déjà payée.'], 422);
         }
 
-        // Appel à l'API FedaPay
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . env('FEDAPAY_SECRET_KEY')
-        ])->post('https://api.fedapay.com/v1/transactions', [
-            'amount' => $invoice->montant,
-            'currency' => 'XOF',
-            'description' => 'Facture #' . $invoice->numero,
-            'callback_url' => env('APP_URL') . '/api/webhooks/fedapay',
-            'metadata' => ['invoice_id' => $invoice->id]
+        // --- Simulation : on reproduit exactement le code du webhook ---
+
+        $invoice->statut = 'paye';
+        $invoice->save();
+
+        Payment::create([
+            'invoice_id' => $invoice->id,
+            'montant' => $invoice->montant,
+            'date_paiement' => now(),
+            'methode' => 'Simulation',
+            'reference_fedapay' => 'SIM-' . uniqid()
         ]);
 
-        if ($response->failed()) {
-            return response()->json(['error' => 'Erreur de communication avec FedaPay.'], 500);
+        // Si c'est un abonnement, génération de licence et clé
+        if ($invoice->type === 'abonnement') {
+            // Récupérer l'abonnement actif créé lors de la souscription
+            $subscription = Subscription::where('client_id', $invoice->client_id)
+                                        ->where('statut', 'active')
+                                        ->latest()
+                                        ->first();
+
+            if ($subscription) {
+                $uniqueKey = Str::uuid();
+                $license = License::create([
+                    'software_id' => $subscription->license->software_id,
+                    'key' => $uniqueKey,
+                    'status' => 'active',
+                    'type' => $subscription->license->type,
+                    'duree' => $subscription->license->duree,
+                    'prix' => $subscription->license->prix
+                ]);
+                // Mise à jour de l'abonnement avec la nouvelle licence
+                $subscription->license_id = $license->id;
+                $subscription->save();
+
+                // Lier la facture à l'abonnement et y stocker la clé
+                $invoice->cle_acces = $uniqueKey;
+                $invoice->subscription_id = $subscription->id;  // <-- AJOUT CAPITAL
+                $invoice->save();
+            }
         }
 
-        return response()->json(['payment_url' => $response->json()['url']]);
+        // Notification client
+        Notification::create([
+            'user_id' => $invoice->client->user_id,
+            'message' => "Paiement simulé confirmé pour la facture {$invoice->numero}.",
+            'date_envoi' => now(),
+            'lu' => false
+        ]);
+
+        return response()->json(['message' => 'Paiement simulé avec succès.']);
     }
 
     public function handleWebhook(Request $request)

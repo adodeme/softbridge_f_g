@@ -11,9 +11,7 @@ class Software extends Model
     // IMPORTANT : On force le nom de la table au pluriel pour éviter l'erreur
     protected $table = 'softwares';
 
-    protected $fillable = [
-        'nom', 'description', 'categorie', 'capture'
-    ];
+    protected $fillable = ['nom', 'description', 'categorie', 'capture', 'url'];
 
     public function licenses()
     {

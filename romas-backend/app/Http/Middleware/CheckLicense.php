@@ -13,18 +13,16 @@ class CheckLicense
     {
         $user = auth()->user();
         
-        // Si l'utilisateur n'est pas un client, il n'a pas de licence
         if ($user->role !== 'client') {
             return response()->json(['message' => 'Accès réservé aux clients'], 403);
         }
 
-        // Récupération de la licence depuis la requête (ex: passé en paramètre)
-        $licenseId = $request->route('license_id'); // Ou $request->input('license_id')
+        $licenseId = $request->route('license_id');
         
         $license = License::where('id', $licenseId)
-                          ->whereHas('subscriptions', function($q) use ($user) {
-                              $q->where('client_id', $user->client->id);
-                          })->first();
+            ->whereHas('subscriptions', function($q) use ($user) {
+                $q->where('client_id', $user->client->id);
+            })->first();
 
         if (!$license) {
             return response()->json(['message' => 'Licence introuvable ou non associée à ce client.'], 404);

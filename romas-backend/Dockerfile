@@ -1,31 +1,38 @@
-# Utiliser une image PHP officielle avec Apache
 FROM php:8.2-apache
 
-# Installer les extensions PHP nécessaires à Laravel
-RUN docker-php-ext-install pdo pdo_mysql
+# Installation des extensions PHP nécessaires à Laravel
+RUN apt-get update && apt-get install -y \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    curl \
+    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
 
-# Activer le module rewrite d'Apache (nécessaire pour Laravel)
 RUN a2enmod rewrite
 
-# Définir le répertoire de travail
 WORKDIR /var/www/html
 
-# Copier le code du projet dans le conteneur
 COPY . .
 
-# Installer Composer et les dépendances
+# Copier Composer depuis l'image officielle
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-RUN composer install --no-dev --optimize-autoloader
 
-# Définir les permissions sur storage et bootstrap/cache
+# Augmenter la mémoire PHP pour Composer et installer les dépendances
+RUN php -d memory_limit=512M /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
 RUN chown -R www-data:www-data storage bootstrap/cache
 RUN chmod -R 775 storage bootstrap/cache
 
-# Copier le fichier de configuration Apache pour pointer vers /public
+# Fichier de configuration Apache
 COPY apache.conf /etc/apache2/sites-available/000-default.conf
 
-# Exposer le port 80 (Render mappe automatiquement le port 10000)
+# Script de démarrage
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
 EXPOSE 80
 
-# Lancer Apache au premier plan
-CMD ["apache2-foreground"]
+CMD ["/usr/local/bin/start.sh"]

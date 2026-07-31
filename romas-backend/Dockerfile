@@ -3,8 +3,8 @@ FROM php:8.2-apache
 WORKDIR /var/www/html
 
 RUN apt-get update && apt-get install -y \
-    libpng-dev libonig-dev libxml2-dev libzip-dev zip unzip curl \
-    && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
+    libpng-dev libonig-dev libxml2-dev libzip-dev zip unzip curl libpq-dev \
+    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip
 
 RUN a2enmod rewrite
 

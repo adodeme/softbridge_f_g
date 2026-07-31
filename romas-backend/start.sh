@@ -1,21 +1,16 @@
 #!/bin/bash
+set -e
 
-# Nettoyage du cache Laravel (obligatoire pour prendre en compte CORS et routes)
+# Nettoyage du cache Laravel
 php artisan config:clear
 php artisan route:clear
 php artisan cache:clear
 
-# Migrations (ne s'exécute qu'une fois si la base est déjà à jour)
+# Migrations (ne s'exécute que si nécessaire)
 php artisan migrate --force
 
-# Seed (ne fait rien si les données existent déjà grâce à updateOrCreate)
-php artisan db:seed --force || echo "⚠️ Le seed a rencontré une erreur, mais le serveur continue."
+# Seed (updateOrCreate évite les doublons)
+php artisan db:seed --force
 
-# Forcer les en-têtes CORS dans Apache (solution de contournement fiable)
-echo 'Header set Access-Control-Allow-Origin "https://soft-bridge.netlify.app"' >> /etc/apache2/apache2.conf
-echo 'Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"' >> /etc/apache2/apache2.conf
-echo 'Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"' >> /etc/apache2/apache2.conf
-echo 'Header set Access-Control-Allow-Credentials "true"' >> /etc/apache2/apache2.conf
-
-# Lancer Apache en premier plan
+# Lancement d'Apache au premier plan
 apache2-foreground

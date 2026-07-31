@@ -37,53 +37,48 @@ class SoftwareController extends Controller
     }
 
 
-    public function store(Request $request)
-    {
-        $request->validate([
-            'nom' => 'required|string',
-            'description' => 'required|string',
-            'categorie' => 'required|string',
-            'url' => 'nullable|url',
-            'capture' => 'nullable|image|max:5120',
-            'licenses' => 'nullable|json'
-        ]);
+public function store(Request $request)
+{
+    $request->validate([
+        'nom' => 'required|string',
+        'description' => 'required|string',
+        'categorie' => 'required|string',
+        'url' => 'nullable|url',
+        'capture' => 'nullable|image|max:5120',
+        'licenses' => 'nullable|json'
+    ]);
 
-        // Gestion de l'image
-        $path = null;
-        if ($request->hasFile('capture')) {
-            $path = $request->file('capture')->store('softwares', 'public');
-        }
-
-        // Création du logiciel
-        $software = Software::create([
-            'nom' => $request->nom,
-            'description' => $request->description,
-            'categorie' => $request->categorie,
-            'url' => $request->url,
-            'capture' => $path
-        ]);
-
-        // Gestion des licences
-        if ($request->filled('licenses')) {
-            $licenses = json_decode($request->licenses, true);
-            if (is_array($licenses)) {
-                foreach ($licenses as $lic) {
-                    License::create([
-                        'software_id' => $software->id,
-                        'type' => $lic['type'],
-                        'duree' => $lic['duree'],
-                        'prix' => $lic['prix']
-                    ]);
-                }
-            }
-        }
-
-        return response()->json($software->load('licenses'), 201);
+    $path = null;
+    if ($request->hasFile('capture')) {
+        $path = $request->file('capture')->store('softwares', 'public');
     }
 
-    /**
-     * Modification d'un logiciel (admin).
-     */
+    $software = Software::create([
+        'nom' => $request->nom,
+        'description' => $request->description,
+        'categorie' => $request->categorie,
+        'url' => $request->url,
+        'capture' => $path
+    ]);
+
+    if ($request->filled('licenses')) {
+        $licenses = json_decode($request->licenses, true);
+        if (is_array($licenses)) {
+            foreach ($licenses as $lic) {
+                $license = new License([
+                    'type'  => $lic['type'],
+                    'duree' => $lic['duree'],
+                    'prix'  => $lic['prix']
+                ]);
+                $license->software_id = $software->id;
+                $license->save();
+            }
+        }
+    }
+
+    return response()->json($software->load('licenses'), 201);
+}
+
     public function update(Request $request, Software $software)
     {
         $request->validate([
@@ -95,9 +90,7 @@ class SoftwareController extends Controller
             'licenses' => 'nullable|json'
         ]);
 
-        // Gestion de l'image
         if ($request->hasFile('capture')) {
-            // Supprimer l'ancienne image si elle existe
             if ($software->capture) {
                 Storage::disk('public')->delete($software->capture);
             }
@@ -105,30 +98,28 @@ class SoftwareController extends Controller
             $software->capture = $path;
         }
 
-        // Mise à jour des champs texte
         $software->update($request->only(['nom', 'description', 'categorie', 'url']));
 
-        // Mise à jour des licences : suppression des anciennes et recréation
         if ($request->filled('licenses')) {
             $licenses = json_decode($request->licenses, true);
             if (is_array($licenses)) {
-                // Supprimer les licences existantes
+                // Supprimer les anciennes licences
                 $software->licenses()->delete();
                 // Créer les nouvelles
                 foreach ($licenses as $lic) {
-                    License::create([
-                        'software_id' => $software->id,
-                        'type' => $lic['type'],
+                    $license = new License([
+                        'type'  => $lic['type'],
                         'duree' => $lic['duree'],
-                        'prix' => $lic['prix']
+                        'prix'  => $lic['prix']
                     ]);
+                    $license->software_id = $software->id;
+                    $license->save();
                 }
             }
         }
 
         return response()->json($software->load('licenses'));
     }
-
     /**
      * Suppression d'un logiciel (admin). Bloqué s'il y a des licences actives,
      * sauf si le paramètre force=true est passé.

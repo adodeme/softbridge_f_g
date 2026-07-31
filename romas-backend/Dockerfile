@@ -1,32 +1,22 @@
 FROM php:8.2-apache
 
-# Installation des extensions PHP nécessaires à Laravel
+WORKDIR /var/www/html
+
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    libzip-dev \
-    zip \
-    unzip \
-    curl \
+    libpng-dev libonig-dev libxml2-dev libzip-dev zip unzip curl \
     && docker-php-ext-install pdo pdo_mysql mbstring exif pcntl bcmath gd zip
 
 RUN a2enmod rewrite
 
-WORKDIR /var/www/html
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 COPY . .
 
-# Copier Composer depuis l'image officielle
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Augmenter la mémoire PHP pour Composer et installer les dépendances
 RUN php -d memory_limit=512M /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 RUN chown -R www-data:www-data storage bootstrap/cache
 RUN chmod -R 775 storage bootstrap/cache
 
-# Fichier de configuration Apache
 COPY apache.conf /etc/apache2/sites-available/000-default.conf
 
 # Script de démarrage

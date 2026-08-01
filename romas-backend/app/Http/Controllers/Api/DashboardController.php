@@ -29,7 +29,7 @@ class DashboardController extends Controller
                 ]);
             } elseif ($user->role === 'chef_projet') {
                 return response()->json([
-                    'totalClients' => Client::count(),
+                    'total_clients' => User::where('role', 'client')->count(),
                     'totalQuotes' => Quote::count(),
                     'totalProjects' => Project::count(),
                     'totalReports' => Report::count(),
@@ -49,7 +49,7 @@ class DashboardController extends Controller
 
                 return response()->json([
                     'total_users' => User::count(),
-                    'total_clients' => Client::count(),
+                    'total_clients' => User::where('role', 'client')->count(),
                     'total_projects' => Project::count(),
                     'pending_quotes' => Quote::where('statut', 'envoye')->count(),
                     'total_revenue' => Invoice::where('statut', 'paye')->sum('montant'),

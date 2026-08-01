@@ -1,16 +1,14 @@
 #!/bin/bash
 set -e
 
-# Nettoyage du cache Laravel
 php artisan config:clear
 php artisan route:clear
 php artisan cache:clear
 
-# Migrations (ne s'exécute que si nécessaire)
-php artisan migrate --force
+# Créer le lien symbolique pour les fichiers uploadés
+php artisan storage:link --force
 
-# Seed (updateOrCreate évite les doublons)
+php artisan migrate --force
 php artisan db:seed --force
 
-# Lancement d'Apache au premier plan
 apache2-foreground

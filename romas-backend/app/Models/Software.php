@@ -17,4 +17,11 @@ class Software extends Model
     {
         return $this->hasMany(License::class);
     }
+    public function getCaptureUrlAttribute()
+    {
+        if ($this->capture) {
+            return asset('storage/' . $this->capture);
+        }
+        return null;
+    }
 }

@@ -16,7 +16,6 @@ class AppointmentController extends Controller
     public function index()
     {
         $user = Auth::user();
-        // Si l'utilisateur est un client, on ne renvoie que ses propres rendez-vous
         if ($user->role === 'client') {
             return response()->json(
                 Appointment::where('user_id', $user->id)
@@ -25,7 +24,6 @@ class AppointmentController extends Controller
                     ->get()
             );
         }
-        // Si c'est un Chef de Projet ou Admin, on renvoie TOUS les rendez-vous
         return response()->json(Appointment::with('user')->orderBy('date', 'desc')->get());
     }
 
@@ -36,7 +34,6 @@ class AppointmentController extends Controller
 
     public function store(Request $request)
     {
-        // 1. Validation des champs
         $request->validate([
             'date' => 'required|date',
             'heure_debut' => 'required|date_format:H:i',
@@ -51,7 +48,6 @@ class AppointmentController extends Controller
         $start = Carbon::parse($request->heure_debut);
         $end = $start->copy()->addMinutes($request->duree);
 
-        // 2. Vérification des jours ouvrables et horaires de travail
         if (Carbon::parse($date)->isWeekend()) {
             return response()->json(['error' => 'L\'entreprise est fermée le week-end.'], 422);
         }
@@ -62,23 +58,20 @@ class AppointmentController extends Controller
             return response()->json(['error' => 'L\'entreprise est en pause entre 13h00 et 15h00.'], 422);
         }
 
-        // 3. Vérification des conflits (créneau déjà pris)
+        // Vérification de conflit compatible PostgreSQL
         $conflict = Appointment::where('date', $date)
             ->where('heure_debut', '<', $end->format('H:i'))
-            ->whereRaw('ADDTIME(heure_debut, SEC_TO_TIME(duree*60)) > ?', [$start->format('H:i')])
+            ->whereRaw("(heure_debut + (duree * interval '1 minute')) > ?", [$start->format('H:i')])
             ->exists();
 
         if ($conflict) {
             return response()->json(['error' => 'Ce créneau horaire est déjà pris.'], 422);
         }
 
-        // 4. Création du rendez-vous
-        // Authentification optionnelle via Sanctum
-        $user = Auth::guard('sanctum')->user();
         $appointment = Appointment::create([
-            'user_id' => $user->id ?? null,
+            'user_id' => Auth::guard('sanctum')->id(),
             'date' => $date,
-            'heure_debut' => $start,
+            'heure_debut' => $start->format('H:i'),
             'duree' => $request->duree,
             'statut' => 'valide',
             'guest_nom' => $request->nom,
@@ -87,8 +80,6 @@ class AppointmentController extends Controller
             'guest_telephone' => $request->telephone
         ]);
 
-        // 5. Notifications
-        // Notification au(x) chef(s) de projet
         foreach (User::where('role', 'chef_projet')->get() as $chef) {
             Notification::create([
                 'user_id' => $chef->id,
@@ -98,11 +89,10 @@ class AppointmentController extends Controller
             ]);
         }
 
-        // Notification au client s'il est connecté
         if ($appointment->user_id) {
             Notification::create([
                 'user_id' => $appointment->user_id,
-                'message' => "Votre rendez-vous du {$date} à {$start->format('H:i')} a été enregistré avec succès.",
+                'message' => "Votre rendez-vous du {$date} à {$start->format('H:i')} a été enregistré.",
                 'date_envoi' => now(),
                 'lu' => false
             ]);

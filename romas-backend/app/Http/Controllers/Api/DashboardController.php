@@ -29,7 +29,7 @@ class DashboardController extends Controller
                 ]);
             } elseif ($user->role === 'chef_projet') {
                 return response()->json([
-                    'total_clients' => User::where('role', 'client')->count(),
+                    'totalClients' => User::where('role', 'client')->count(),
                     'totalQuotes' => Quote::count(),
                     'totalProjects' => Project::count(),
                     'totalReports' => Report::count(),

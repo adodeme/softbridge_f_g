@@ -17,10 +17,22 @@ class UserController extends Controller
             'nom' => 'required', 'prenom' => 'required', 'email' => 'required|email|unique:users',
             'role' => 'required|in:client,chef_projet,administrateur', 'password' => 'required|min:6'
         ]);
+
         $user = User::create([
             'nom' => $request->nom, 'prenom' => $request->prenom, 'email' => $request->email,
             'role' => $request->role, 'password' => Hash::make($request->password)
         ]);
+
+        // Si le rôle est client, créer automatiquement un profil Client
+        if ($user->role === 'client') {
+            Client::create([
+                'user_id' => $user->id,
+                'nom_entreprise' => 'Client ' . $user->prenom . ' ' . $user->nom,
+                'numero_client' => 'CLI-' . strtoupper(uniqid()),
+                'date_inscription' => now()
+            ]);
+        }
+
         return response()->json($user, 201);
     }
 

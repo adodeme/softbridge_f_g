@@ -20,22 +20,20 @@ class Software extends Model
     }
 
     /**
-     * Accesseur pour l'URL publique de l'image.
+     * Accesseur pour obtenir l'URL publique de l'image.
      */
     public function getCaptureUrlAttribute()
     {
-        try {
-            if (empty($this->capture)) {
-                return null;
-            }
-            // Si c'est déjà une URL complète (Cloudinary), on la retourne
-            if (filter_var($this->capture, FILTER_VALIDATE_URL)) {
-                return $this->capture;
-            }
-            // Pour les chemins locaux, utiliser Storage::url()
-            return asset(Storage::url($this->capture));
-        } catch (\Exception $e) {
-            return null; // ne jamais planter à cause d'une image
+        if (empty($this->capture)) {
+            return null;
         }
+
+        // Si c'est déjà une URL complète (Cloudinary ou autre), on la retourne directement
+        if (filter_var($this->capture, FILTER_VALIDATE_URL)) {
+            return $this->capture;
+        }
+
+        // Pour un chemin local (ex: softwares/...png)
+        return rtrim(config('app.url'), '/') . '/storage/' . ltrim($this->capture, '/');
     }
 }

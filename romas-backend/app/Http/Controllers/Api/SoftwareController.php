@@ -52,21 +52,9 @@ class SoftwareController extends Controller
             'licenses' => 'nullable|json'
         ]);
 
-        $captureUrl = null;
+        $path = null;
         if ($request->hasFile('capture')) {
-            try {
-                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                    'folder' => 'softbridge'
-                ]);
-                if ($uploadedFile && method_exists($uploadedFile, 'getSecurePath')) {
-                    $captureUrl = $uploadedFile->getSecurePath();
-                } else {
-                    return response()->json(['message' => 'Erreur lors de l\'upload de l\'image.'], 500);
-                }
-            } catch (\Exception $e) {
-                // Message d'erreur détaillé TEMPORAIRE pour diagnostic
-                return response()->json(['message' => 'Erreur Cloudinary : ' . $e->getMessage()], 500);
-            }
+            $path = $request->file('capture')->store('softwares', 'public');
         }
 
         $software = Software::create([
@@ -74,10 +62,9 @@ class SoftwareController extends Controller
             'description' => $request->description,
             'categorie' => $request->categorie,
             'url' => $request->url,
-            'capture' => $captureUrl
+            'capture' => $path
         ]);
 
-        // Gestion des licences
         if ($request->filled('licenses')) {
             $licenses = json_decode($request->licenses, true);
             if (is_array($licenses)) {

@@ -13,6 +13,7 @@ use App\Models\Subscription;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class SoftwareController extends Controller
 {
@@ -36,49 +37,60 @@ class SoftwareController extends Controller
         return response()->json(Software::with('licenses')->findOrFail($id));
     }
 
+    /**
+     * Ajout d'un logiciel (admin).
+     * Utilise Cloudinary pour l'upload de l'image.
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'nom' => 'required|string',
+            'description' => 'required|string',
+            'categorie' => 'required|string',
+            'url' => 'nullable|url',
+            'capture' => 'nullable|image|max:5120',
+            'licenses' => 'nullable|json'
+        ]);
 
-public function store(Request $request)
-{
-    $request->validate([
-        'nom' => 'required|string',
-        'description' => 'required|string',
-        'categorie' => 'required|string',
-        'url' => 'nullable|url',
-        'capture' => 'nullable|image|max:5120',
-        'licenses' => 'nullable|json'
-    ]);
+        // Upload vers Cloudinary si une image est fournie
+        $captureUrl = null;
+        if ($request->hasFile('capture')) {
+            $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
+                'folder' => 'softbridge'
+            ]);
+            $captureUrl = $uploadedFile->getSecurePath();
+        }
 
-    $path = null;
-    if ($request->hasFile('capture')) {
-        $path = $request->file('capture')->store('softwares', 'public');
-    }
+        $software = Software::create([
+            'nom' => $request->nom,
+            'description' => $request->description,
+            'categorie' => $request->categorie,
+            'url' => $request->url,
+            'capture' => $captureUrl
+        ]);
 
-    $software = Software::create([
-        'nom' => $request->nom,
-        'description' => $request->description,
-        'categorie' => $request->categorie,
-        'url' => $request->url,
-        'capture' => $path
-    ]);
-
-    if ($request->filled('licenses')) {
-        $licenses = json_decode($request->licenses, true);
-        if (is_array($licenses)) {
-            foreach ($licenses as $lic) {
-                $license = new License([
-                    'type'  => $lic['type'],
-                    'duree' => $lic['duree'],
-                    'prix'  => $lic['prix']
-                ]);
-                $license->software_id = $software->id;
-                $license->save();
+        // Gestion des licences
+        if ($request->filled('licenses')) {
+            $licenses = json_decode($request->licenses, true);
+            if (is_array($licenses)) {
+                foreach ($licenses as $lic) {
+                    License::create([
+                        'software_id' => $software->id,
+                        'type' => $lic['type'],
+                        'duree' => $lic['duree'],
+                        'prix' => $lic['prix']
+                    ]);
+                }
             }
         }
+
+        return response()->json($software->load('licenses'), 201);
     }
 
-    return response()->json($software->load('licenses'), 201);
-}
-
+    /**
+     * Modification d'un logiciel (admin).
+     * Utilise Cloudinary pour l'upload de l'image.
+     */
     public function update(Request $request, Software $software)
     {
         $request->validate([
@@ -90,39 +102,39 @@ public function store(Request $request)
             'licenses' => 'nullable|json'
         ]);
 
+        // Si une nouvelle image est envoyée, on l'upload vers Cloudinary
         if ($request->hasFile('capture')) {
-            if ($software->capture) {
-                Storage::disk('public')->delete($software->capture);
-            }
-            $path = $request->file('capture')->store('softwares', 'public');
-            $software->capture = $path;
+            // (Optionnel) Supprimer l'ancienne image Cloudinary n'est pas obligatoire
+            $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
+                'folder' => 'softbridge'
+            ]);
+            $software->capture = $uploadedFile->getSecurePath();
         }
 
         $software->update($request->only(['nom', 'description', 'categorie', 'url']));
 
+        // Mise à jour des licences
         if ($request->filled('licenses')) {
             $licenses = json_decode($request->licenses, true);
             if (is_array($licenses)) {
-                // Supprimer les anciennes licences
                 $software->licenses()->delete();
-                // Créer les nouvelles
                 foreach ($licenses as $lic) {
-                    $license = new License([
-                        'type'  => $lic['type'],
+                    License::create([
+                        'software_id' => $software->id,
+                        'type' => $lic['type'],
                         'duree' => $lic['duree'],
-                        'prix'  => $lic['prix']
+                        'prix' => $lic['prix']
                     ]);
-                    $license->software_id = $software->id;
-                    $license->save();
                 }
             }
         }
 
         return response()->json($software->load('licenses'));
     }
+
     /**
      * Suppression d'un logiciel (admin). Bloqué s'il y a des licences actives,
-     * sauf si le paramètre force=true est passé.
+     * sauf si force=true.
      */
     public function destroy(Request $request, Software $software)
     {
@@ -147,8 +159,10 @@ public function store(Request $request)
 
             $software->licenses()->delete();
 
-            if ($software->capture) {
-                Storage::disk('public')->delete($software->capture);
+            // Suppression de l'image Cloudinary (optionnel, si vous voulez libérer de l'espace)
+            if ($software->capture && filter_var($software->capture, FILTER_VALIDATE_URL)) {
+                // Extraire le public_id depuis l'URL Cloudinary n'est pas trivial ; on peut ignorer
+                // ou implémenter une suppression via l'API Cloudinary si nécessaire.
             }
 
             $software->delete();
@@ -162,7 +176,6 @@ public function store(Request $request)
 
     /**
      * Accès à un logiciel après vérification de la licence (middleware CheckLicense).
-     * Retourne l'URL du logiciel pour redirection côté frontend.
      */
     public function access($license_id)
     {
@@ -173,7 +186,6 @@ public function store(Request $request)
             return response()->json(['message' => 'Aucune URL définie pour ce logiciel.'], 404);
         }
 
-        // Mise à jour de la date de dernier accès
         $license->last_accessed_at = now();
         $license->save();
 
@@ -181,24 +193,23 @@ public function store(Request $request)
     }
 
     /**
-     * Téléchargement d'un logiciel (protégé par CheckLicense via la route groupée).
-     * Actuellement renvoie un message, à adapter selon vos besoins.
+     * Téléchargement d'un logiciel (protégé par CheckLicense).
      */
     public function download($license_id)
     {
-        // La vérification de licence est déjà faite par le middleware CheckLicense
         $license = License::with('software')->findOrFail($license_id);
-        // Logique de téléchargement (ex: renvoyer un fichier)
         return response()->json(['message' => 'Téléchargement autorisé pour ' . $license->software->nom]);
     }
 
+    /**
+     * Vérification de clé d'accès pour un logiciel.
+     */
     public function verifyKey(Request $request)
     {
         $request->validate(['key' => 'required|string']);
         $user = Auth::user();
         $client = $user->client;
 
-        // Retrouver la facture d'abonnement payée avec cette clé, appartenant au client
         $invoice = Invoice::where('cle_acces', $request->key)
             ->where('type', 'abonnement')
             ->where('statut', 'paye')
@@ -226,6 +237,4 @@ public function store(Request $request)
 
         return response()->json(['url' => $software->url]);
     }
-
-
 }

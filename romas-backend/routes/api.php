@@ -15,7 +15,15 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ForgotPasswordController;
 use Illuminate\Support\Facades\Route;
-
+Route::get('/debug-logs', function () {
+    $logFile = storage_path('logs/laravel.log');
+    if (file_exists($logFile)) {
+        $lines = file($logFile);
+        // Retourner les 50 dernières lignes
+        return response()->json(array_slice($lines, -50));
+    }
+    return response()->json(['message' => 'Aucun log trouvé.']);
+});
 // Route pour l'erreur 401 JSON
 Route::get('/unauthenticated', fn() => response()->json(['message' => 'Non authentifié'], 401));
 

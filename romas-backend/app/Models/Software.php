@@ -24,10 +24,18 @@ class Software extends Model
      */
     public function getCaptureUrlAttribute()
     {
-        if ($this->capture) {
-            // Storage::url() retourne /storage/...
+        try {
+            if (empty($this->capture)) {
+                return null;
+            }
+            // Si c'est déjà une URL complète (Cloudinary), on la retourne
+            if (filter_var($this->capture, FILTER_VALIDATE_URL)) {
+                return $this->capture;
+            }
+            // Pour les chemins locaux, utiliser Storage::url()
             return asset(Storage::url($this->capture));
+        } catch (\Exception $e) {
+            return null; // ne jamais planter à cause d'une image
         }
-        return null;
     }
 }

@@ -64,8 +64,8 @@ class SoftwareController extends Controller
                     return response()->json(['message' => 'Erreur lors de l\'upload de l\'image.'], 500);
                 }
             } catch (\Exception $e) {
-                Log::error('Cloudinary upload failed: ' . $e->getMessage());
-                return response()->json(['message' => 'Erreur technique lors de l\'upload de l\'image.'], 500);
+                // Message d'erreur détaillé TEMPORAIRE pour diagnostic
+                return response()->json(['message' => 'Erreur Cloudinary : ' . $e->getMessage()], 500);
             }
         }
 
@@ -77,11 +77,26 @@ class SoftwareController extends Controller
             'capture' => $captureUrl
         ]);
 
-        // ... licences ...
+        // Gestion des licences
+        if ($request->filled('licenses')) {
+            $licenses = json_decode($request->licenses, true);
+            if (is_array($licenses)) {
+                foreach ($licenses as $lic) {
+                    License::create([
+                        'software_id' => $software->id,
+                        'type' => $lic['type'],
+                        'duree' => $lic['duree'],
+                        'prix' => $lic['prix']
+                    ]);
+                }
+            }
+        }
+
+        return response()->json($software->load('licenses'), 201);
     }
+
     /**
      * Modification d'un logiciel (admin).
-     * Utilise Cloudinary pour l'upload de l'image.
      */
     public function update(Request $request, Software $software)
     {
@@ -94,13 +109,18 @@ class SoftwareController extends Controller
             'licenses' => 'nullable|json'
         ]);
 
-        // Si une nouvelle image est envoyée, on l'upload vers Cloudinary
         if ($request->hasFile('capture')) {
-            // (Optionnel) Supprimer l'ancienne image Cloudinary n'est pas obligatoire
-            $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                'folder' => 'softbridge'
-            ]);
-            $software->capture = $uploadedFile->getSecurePath();
+            try {
+                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
+                    'folder' => 'softbridge'
+                ]);
+                if ($uploadedFile && method_exists($uploadedFile, 'getSecurePath')) {
+                    $software->capture = $uploadedFile->getSecurePath();
+                }
+            } catch (\Exception $e) {
+                Log::error('Cloudinary update upload failed: ' . $e->getMessage());
+                return response()->json(['message' => 'Erreur upload : ' . $e->getMessage()], 500);
+            }
         }
 
         $software->update($request->only(['nom', 'description', 'categorie', 'url']));
@@ -125,8 +145,7 @@ class SoftwareController extends Controller
     }
 
     /**
-     * Suppression d'un logiciel (admin). Bloqué s'il y a des licences actives,
-     * sauf si force=true.
+     * Suppression d'un logiciel (admin).
      */
     public function destroy(Request $request, Software $software)
     {
@@ -147,16 +166,9 @@ class SoftwareController extends Controller
                 ], 409);
             }
 
-            Log::info('Suppression logiciel ID ' . $software->id . ($activeLicenses->isNotEmpty() ? ' (forcée, avec licences actives)' : ' (sans licences actives)'));
+            Log::info('Suppression logiciel ID ' . $software->id);
 
             $software->licenses()->delete();
-
-            // Suppression de l'image Cloudinary (optionnel, si vous voulez libérer de l'espace)
-            if ($software->capture && filter_var($software->capture, FILTER_VALIDATE_URL)) {
-                // Extraire le public_id depuis l'URL Cloudinary n'est pas trivial ; on peut ignorer
-                // ou implémenter une suppression via l'API Cloudinary si nécessaire.
-            }
-
             $software->delete();
 
             return response()->json(['message' => 'Logiciel supprimé avec succès.'], 200);
@@ -167,7 +179,7 @@ class SoftwareController extends Controller
     }
 
     /**
-     * Accès à un logiciel après vérification de la licence (middleware CheckLicense).
+     * Accès à un logiciel après vérification de la licence.
      */
     public function access($license_id)
     {

@@ -52,13 +52,21 @@ class SoftwareController extends Controller
             'licenses' => 'nullable|json'
         ]);
 
-        // Upload vers Cloudinary si une image est fournie
         $captureUrl = null;
         if ($request->hasFile('capture')) {
-            $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                'folder' => 'softbridge'
-            ]);
-            $captureUrl = $uploadedFile->getSecurePath();
+            try {
+                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
+                    'folder' => 'softbridge'
+                ]);
+                if ($uploadedFile && method_exists($uploadedFile, 'getSecurePath')) {
+                    $captureUrl = $uploadedFile->getSecurePath();
+                } else {
+                    return response()->json(['message' => 'Erreur lors de l\'upload de l\'image.'], 500);
+                }
+            } catch (\Exception $e) {
+                Log::error('Cloudinary upload failed: ' . $e->getMessage());
+                return response()->json(['message' => 'Erreur technique lors de l\'upload de l\'image.'], 500);
+            }
         }
 
         $software = Software::create([
@@ -69,24 +77,8 @@ class SoftwareController extends Controller
             'capture' => $captureUrl
         ]);
 
-        // Gestion des licences
-        if ($request->filled('licenses')) {
-            $licenses = json_decode($request->licenses, true);
-            if (is_array($licenses)) {
-                foreach ($licenses as $lic) {
-                    License::create([
-                        'software_id' => $software->id,
-                        'type' => $lic['type'],
-                        'duree' => $lic['duree'],
-                        'prix' => $lic['prix']
-                    ]);
-                }
-            }
-        }
-
-        return response()->json($software->load('licenses'), 201);
+        // ... licences ...
     }
-
     /**
      * Modification d'un logiciel (admin).
      * Utilise Cloudinary pour l'upload de l'image.

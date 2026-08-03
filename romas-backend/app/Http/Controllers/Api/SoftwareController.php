@@ -7,7 +7,7 @@ use App\Models\Software;
 use App\Models\License;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
+use Cloudinary\Cloudinary;
 
 class SoftwareController extends Controller
 {
@@ -38,11 +38,19 @@ class SoftwareController extends Controller
 
         $captureUrl = null;
         if ($request->hasFile('capture')) {
+            // Vérification de la configuration
+            $cloudUrl = env('CLOUDINARY_URL');
+            if (empty($cloudUrl)) {
+                return response()->json(['message' => 'Configuration Cloudinary manquante.'], 500);
+            }
+
             try {
-                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                    'folder' => 'softbridge/logiciels'
-                ]);
-                $captureUrl = $uploadedFile->getSecurePath();
+                $cloudinary = new Cloudinary($cloudUrl);
+                $uploadResult = $cloudinary->uploadApi()->upload(
+                    $request->file('capture')->getRealPath(),
+                    ['folder' => 'softbridge/logiciels']
+                );
+                $captureUrl = $uploadResult['secure_url'];
             } catch (\Exception $e) {
                 Log::error('Cloudinary upload failed: ' . $e->getMessage());
                 return response()->json(['message' => 'Erreur Cloudinary : ' . $e->getMessage()], 500);
@@ -86,11 +94,18 @@ class SoftwareController extends Controller
         ]);
 
         if ($request->hasFile('capture')) {
+            $cloudUrl = env('CLOUDINARY_URL');
+            if (empty($cloudUrl)) {
+                return response()->json(['message' => 'Configuration Cloudinary manquante.'], 500);
+            }
+
             try {
-                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                    'folder' => 'softbridge/logiciels'
-                ]);
-                $software->capture = $uploadedFile->getSecurePath();
+                $cloudinary = new Cloudinary($cloudUrl);
+                $uploadResult = $cloudinary->uploadApi()->upload(
+                    $request->file('capture')->getRealPath(),
+                    ['folder' => 'softbridge/logiciels']
+                );
+                $software->capture = $uploadResult['secure_url'];
             } catch (\Exception $e) {
                 Log::error('Cloudinary update upload failed: ' . $e->getMessage());
                 return response()->json(['message' => 'Erreur Cloudinary : ' . $e->getMessage()], 500);

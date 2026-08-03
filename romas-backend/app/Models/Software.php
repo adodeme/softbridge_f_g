@@ -29,7 +29,7 @@ class Software extends Model
             return null;
         }
 
-        // Si c'est déjà une URL complète (Cloudinary, etc.), on la retourne telle quelle
+        // Si c'est déjà une URL complète (Cloudinary), on la retourne
         if (filter_var($this->capture, FILTER_VALIDATE_URL)) {
             return $this->capture;
         }

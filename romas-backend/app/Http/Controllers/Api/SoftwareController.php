@@ -32,17 +32,21 @@ class SoftwareController extends Controller
             'description' => 'required|string',
             'categorie' => 'required|string',
             'url' => 'nullable|url',
-            'capture' => 'nullable|image|max:5120', // max 5 Mo
+            'capture' => 'nullable|image|max:5120',
             'licenses' => 'nullable|json'
         ]);
 
         $captureUrl = null;
         if ($request->hasFile('capture')) {
-            // Upload vers Cloudinary
-            $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                'folder' => 'softbridge/logiciels'
-            ]);
-            $captureUrl = $uploadedFile->getSecurePath();
+            try {
+                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
+                    'folder' => 'softbridge/logiciels'
+                ]);
+                $captureUrl = $uploadedFile->getSecurePath();
+            } catch (\Exception $e) {
+                Log::error('Cloudinary upload failed: ' . $e->getMessage());
+                return response()->json(['message' => 'Erreur Cloudinary : ' . $e->getMessage()], 500);
+            }
         }
 
         $software = Software::create([
@@ -53,7 +57,6 @@ class SoftwareController extends Controller
             'capture' => $captureUrl
         ]);
 
-        // Gestion des licences
         if ($request->filled('licenses')) {
             $licenses = json_decode($request->licenses, true);
             if (is_array($licenses)) {
@@ -83,20 +86,19 @@ class SoftwareController extends Controller
         ]);
 
         if ($request->hasFile('capture')) {
-            // Optionnel : supprimer l'ancienne image sur Cloudinary
-            // (nécessite de stocker le public_id en BDD pour utiliser destroy())
-            // $publicId = $software->capture_public_id;
-            // Cloudinary::destroy($publicId);
-
-            $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
-                'folder' => 'softbridge/logiciels'
-            ]);
-            $software->capture = $uploadedFile->getSecurePath();
+            try {
+                $uploadedFile = Cloudinary::upload($request->file('capture')->getRealPath(), [
+                    'folder' => 'softbridge/logiciels'
+                ]);
+                $software->capture = $uploadedFile->getSecurePath();
+            } catch (\Exception $e) {
+                Log::error('Cloudinary update upload failed: ' . $e->getMessage());
+                return response()->json(['message' => 'Erreur Cloudinary : ' . $e->getMessage()], 500);
+            }
         }
 
         $software->update($request->only(['nom', 'description', 'categorie', 'url']));
 
-        // Mise à jour des licences
         if ($request->filled('licenses')) {
             $licenses = json_decode($request->licenses, true);
             if (is_array($licenses)) {
@@ -131,10 +133,6 @@ class SoftwareController extends Controller
                 ], 409);
             }
 
-            // Supprimer l'image Cloudinary (optionnel)
-            // $publicId = $software->capture_public_id;
-            // Cloudinary::destroy($publicId);
-
             $software->licenses()->delete();
             $software->delete();
 
@@ -145,5 +143,58 @@ class SoftwareController extends Controller
         }
     }
 
-    // ... autres méthodes (access, download, verifyKey) inchangées
+    public function access($license_id)
+    {
+        $license = License::with('software')->findOrFail($license_id);
+        $software = $license->software;
+
+        if (!$software->url) {
+            return response()->json(['message' => 'Aucune URL définie pour ce logiciel.'], 404);
+        }
+
+        $license->last_accessed_at = now();
+        $license->save();
+
+        return response()->json(['url' => $software->url]);
+    }
+
+    public function download($license_id)
+    {
+        $license = License::with('software')->findOrFail($license_id);
+        return response()->json(['message' => 'Téléchargement autorisé pour ' . $license->software->nom]);
+    }
+
+    public function verifyKey(Request $request)
+    {
+        $request->validate(['key' => 'required|string']);
+        $user = Auth::user();
+        $client = $user->client;
+
+        $invoice = Invoice::where('cle_acces', $request->key)
+            ->where('type', 'abonnement')
+            ->where('statut', 'paye')
+            ->where('client_id', $client->id)
+            ->with('subscription.license.software')
+            ->first();
+
+        if (!$invoice || !$invoice->subscription || !$invoice->subscription->license) {
+            return response()->json(['message' => 'Clé invalide ou expirée.'], 404);
+        }
+
+        $subscription = $invoice->subscription;
+
+        if ($subscription->statut !== 'active' || Carbon::now()->gt($subscription->date_fin)) {
+            return response()->json(['message' => 'Votre abonnement a expiré.'], 403);
+        }
+
+        $software = $subscription->license->software;
+        if (!$software->url) {
+            return response()->json(['message' => 'Aucune URL définie pour ce logiciel.'], 404);
+        }
+
+        $subscription->license->last_accessed_at = now();
+        $subscription->license->save();
+
+        return response()->json(['url' => $software->url]);
+    }
 }

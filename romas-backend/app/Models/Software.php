@@ -11,6 +11,7 @@ class Software extends Model
     use Auditable;
 
     protected $table = 'softwares';
+    protected $appends = ['capture_url'];
 
     protected $fillable = ['nom', 'description', 'categorie', 'capture', 'url'];
 

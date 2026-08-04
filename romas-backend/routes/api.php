@@ -146,3 +146,9 @@ Route::get('/test-send-mail', function () {
         ], 500);
     }
 });
+Route::get('/check-mail-config', function () {
+    return response()->json([
+        'default' => config('mail.default'),
+        'mailers' => config('mail.mailers'),
+    ]);
+});

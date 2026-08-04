@@ -15,7 +15,7 @@
         "laravel/tinker": "^2.10.1",
         "league/oauth2-google": "^5.0",
         "resend/resend-laravel": "^1.4",
-        "symfony/google-mailer": "^7.4"
+        "symfony/google-mailer": "7.4.*"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

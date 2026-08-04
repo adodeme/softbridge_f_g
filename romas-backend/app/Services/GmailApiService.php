@@ -34,12 +34,15 @@ class GmailApiService
 
         if ($response->failed()) {
             Log::error('Échec de rafraîchissement du token Gmail', $response->json());
-            throw new \Exception('Access token error: ' . json_encode($response->json()));
+            throw new \Exception('Impossible d’obtenir un access token Gmail.');
         }
 
         return $response->json()['access_token'];
     }
 
+    /**
+     * Envoyer un email de réinitialisation de mot de passe.
+     */
     public function sendResetLink(string $toEmail, string $token): void
     {
         $frontendUrl = config('app.frontend_url');
@@ -48,25 +51,23 @@ class GmailApiService
         $subject = 'Réinitialisation de votre mot de passe SoftBridge';
         $body    = "Bonjour,\n\nVous avez demandé une réinitialisation de mot de passe.\n\nCliquez sur ce lien pour continuer : $resetLink\n\nCe lien expirera dans 15 minutes.\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.";
 
+        // Construire le message MIME conforme à l'API Gmail
         $rawMessage = $this->createMimeMessage($toEmail, $subject, $body);
 
-        try {
-            $accessToken = $this->getAccessToken();
-        } catch (\Exception $e) {
-            throw new \Exception('Erreur access token: ' . $e->getMessage());
-        }
+        $accessToken = $this->getAccessToken();
 
+        // Envoi multipart (obligatoire pour l'API Gmail upload)
         $response = Http::withToken($accessToken)
-            ->asJson()
-            ->post('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send', [
-                'raw' => $rawMessage,
-            ]);
+            ->attach('file', $rawMessage, 'message.eml')
+            ->asMultipart()
+            ->post('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send');
 
         if ($response->failed()) {
             Log::error('Échec de l\'envoi Gmail', $response->json());
-            throw new \Exception('Gmail API error: ' . json_encode($response->json()));
+            throw new \Exception('Impossible d\'envoyer l\'email via Gmail.');
         }
     }
+
     /**
      * Créer un message MIME encodé en base64url.
      */

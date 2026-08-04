@@ -1,5 +1,5 @@
 FROM php:8.2-apache
-
+# Force rebuild
 WORKDIR /var/www/html
 
 # Installation des dépendances système et extensions PHP

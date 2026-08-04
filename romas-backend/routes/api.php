@@ -124,3 +124,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/reports/{id}/ignore', [ReportController::class, 'ignore']);
     });
 });
+Route::get('/debug-softwares', function () {
+    return response()->json(
+        \App\Models\Software::with('licenses')->orderByDesc('id')->get()
+    );
+});

@@ -130,3 +130,19 @@ Route::get('/test-mail-config', function () {
         'gmail_config'   => config('mail.mailers.gmail'),
     ]);
 });
+use Illuminate\Support\Facades\Mail;
+
+Route::get('/test-send-mail', function () {
+    try {
+        Mail::raw('Test email from SoftBridge', function ($message) {
+            $message->to('flodiasadodeme2@gmail.com')
+                    ->subject('Test Mail');
+        });
+        return response()->json(['message' => 'Email envoyé avec succès']);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});

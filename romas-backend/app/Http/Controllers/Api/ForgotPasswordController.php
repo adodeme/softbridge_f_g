@@ -3,28 +3,41 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Services\GmailApiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Facades\Hash;
-use App\Models\User;
 
 class ForgotPasswordController extends Controller
 {
-    // Envoi du lien de réinitialisation
     public function sendResetLinkEmail(Request $request)
     {
-        $request->validate(['email' => 'required|email|exists:users,email']);
+        $request->validate(['email' => 'required|email']);
 
-        $status = Password::sendResetLink($request->only('email'));
+        $user = User::where('email', $request->email)->first();
 
-        return $status === Password::RESET_LINK_SENT
-            ? response()->json(['message' => __($status)], 200)
-            : response()->json(['message' => __($status)], 422);
+        if (!$user) {
+            // Toujours renvoyer un message positif pour ne pas fuiter d'information
+            return response()->json(['message' => 'Si cet email existe, un lien de réinitialisation a été envoyé.'], 200);
+        }
+
+        // Générer un token de réinitialisation (comme le fait Password::sendResetLink)
+        $token = Password::createToken($user);
+
+        try {
+            $gmail = new GmailApiService();
+            $gmail->sendResetLink($user->email, $token);
+
+            return response()->json(['message' => 'Un lien de réinitialisation a été envoyé à votre adresse email.'], 200);
+        } catch (\Exception $e) {
+            \Log::error('Erreur envoi email Gmail: ' . $e->getMessage());
+            return response()->json(['message' => 'Erreur lors de l\'envoi de l\'email.'], 500);
+        }
     }
 
-    // Réinitialisation du mot de passe
     public function reset(Request $request)
     {
+        // La méthode reset reste inchangée (elle utilise le PasswordBroker pour réinitialiser le mot de passe)
         $request->validate([
             'token' => 'required',
             'email' => 'required|email|exists:users,email',
@@ -35,7 +48,7 @@ class ForgotPasswordController extends Controller
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password) {
                 $user->forceFill([
-                    'password' => Hash::make($password)
+                    'password' => \Hash::make($password)
                 ])->save();
             }
         );

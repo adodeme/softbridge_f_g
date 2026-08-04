@@ -152,3 +152,8 @@ Route::get('/check-mail-config', function () {
         'mailers' => config('mail.mailers'),
     ]);
 });
+Route::get('/check-gmail-package', function () {
+    return response()->json([
+        'class_exists' => class_exists(\Symfony\Component\Mailer\Bridge\Google\Transport\GmailTransport::class),
+    ]);
+});

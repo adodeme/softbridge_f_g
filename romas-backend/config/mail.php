@@ -114,5 +114,12 @@ return [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
+    'gmail' => [
+        'transport' => 'gmail',
+        'username' => env('MAIL_USERNAME'),
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'refresh_token' => env('GOOGLE_REFRESH_TOKEN'),
+    ],
 
 ];

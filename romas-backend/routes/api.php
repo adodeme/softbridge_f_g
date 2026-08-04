@@ -124,3 +124,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/reports/{id}/ignore', [ReportController::class, 'ignore']);
     });
 });
+Route::get('/test-mail-config', function () {
+    return response()->json([
+        'default_mailer' => config('mail.default'),
+        'gmail_config'   => config('mail.mailers.gmail'),
+    ]);
+});

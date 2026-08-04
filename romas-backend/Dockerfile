@@ -1,5 +1,5 @@
 FROM php:8.2-apache
-# Force rebuild – step 5
+# Force rebuild – step 6 (reset cache)
 WORKDIR /var/www/html
 
 # Installation des dépendances système et extensions PHP
@@ -17,7 +17,10 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Copie du code source
 COPY . .
 
-# Installation des dépendances PHP
+# Nettoyage du cache Composer pour forcer une installation propre
+RUN composer clear-cache
+
+# Installation des dépendances PHP (sans cache)
 RUN php -d memory_limit=512M /usr/bin/composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 # Permissions

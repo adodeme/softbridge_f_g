@@ -51,16 +51,17 @@ class GmailApiService
         $subject = 'Réinitialisation de votre mot de passe SoftBridge';
         $body    = "Bonjour,\n\nVous avez demandé une réinitialisation de mot de passe.\n\nCliquez sur ce lien pour continuer : $resetLink\n\nCe lien expirera dans 15 minutes.\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.";
 
-        // Construire le message MIME conforme à l'API Gmail
+        // Construire le message MIME encodé en base64url
         $rawMessage = $this->createMimeMessage($toEmail, $subject, $body);
 
         $accessToken = $this->getAccessToken();
 
-        // Envoi multipart (obligatoire pour l'API Gmail upload)
+        // Utilisation de l'endpoint standard (JSON)
         $response = Http::withToken($accessToken)
-            ->attach('file', $rawMessage, 'message.eml')
-            ->asMultipart()
-            ->post('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send');
+            ->asJson()
+            ->post('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', [
+                'raw' => $rawMessage,
+            ]);
 
         if ($response->failed()) {
             $errorBody = $response->body();

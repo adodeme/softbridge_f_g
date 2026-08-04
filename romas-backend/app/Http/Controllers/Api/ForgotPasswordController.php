@@ -17,21 +17,23 @@ class ForgotPasswordController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user) {
-            // Toujours renvoyer un message positif pour ne pas fuiter d'information
             return response()->json(['message' => 'Si cet email existe, un lien de réinitialisation a été envoyé.'], 200);
         }
 
-        // Générer un token de réinitialisation (comme le fait Password::sendResetLink)
         $token = Password::createToken($user);
 
         try {
             $gmail = new GmailApiService();
             $gmail->sendResetLink($user->email, $token);
-
             return response()->json(['message' => 'Un lien de réinitialisation a été envoyé à votre adresse email.'], 200);
         } catch (\Exception $e) {
-            \Log::error('Erreur envoi email Gmail: ' . $e->getMessage());
-            return response()->json(['message' => 'Erreur lors de l\'envoi de l\'email.'], 500);
+            // Message d'erreur complet pour diagnostic
+            return response()->json([
+                'message' => 'Erreur envoi : ' . $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString()
+            ], 500);
         }
     }
 

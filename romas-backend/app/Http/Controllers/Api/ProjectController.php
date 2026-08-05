@@ -16,7 +16,9 @@ class ProjectController extends Controller
         if ($user->role === 'client') {
             return response()->json($user->client->projects()->with('quote')->get());
         }
-        return response()->json(Project::with('client', 'quote')->get());
+        return response()->json(
+            Project::with('client:id,nom_entreprise', 'quote:id,besoins')->get()
+        );
     }
 
     public function show($id)

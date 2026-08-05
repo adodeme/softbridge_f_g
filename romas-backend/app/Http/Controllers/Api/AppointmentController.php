@@ -24,7 +24,9 @@ class AppointmentController extends Controller
                     ->get()
             );
         }
-        return response()->json(Appointment::with('user')->orderBy('date', 'desc')->get());
+        return response()->json(
+            Appointment::with('user')->orderBy('date', 'desc')->limit(50)->get()
+        );
     }
 
     public function show($id)

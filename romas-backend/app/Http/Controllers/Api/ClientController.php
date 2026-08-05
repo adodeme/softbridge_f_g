@@ -13,7 +13,9 @@ class ClientController extends Controller
 {
     public function index()
     {
-        return response()->json(Client::with('user')->get());
+        return response()->json(
+            Client::with('user:id,nom,prenom')->get()
+        );
     }
 
     public function store(Request $request)

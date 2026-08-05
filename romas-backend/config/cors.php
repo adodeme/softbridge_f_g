@@ -7,6 +7,7 @@ return [
         'http://localhost:5173',
         'http://localhost:5174',
         'https://soft-bridge.netlify.app',
+        'https://softbridge-ruby.vercel.app/',
     ],
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],

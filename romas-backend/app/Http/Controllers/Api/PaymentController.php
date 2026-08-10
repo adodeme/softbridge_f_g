@@ -16,6 +16,37 @@ use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
+    public function initiate(Request $request)
+    {
+        $request->validate(['invoice_id' => 'required|exists:invoices,id']);
+        $invoice = Invoice::with('client.user')->findOrFail($request->invoice_id);
+
+        if ($invoice->client_id !== Auth::user()->client->id) {
+            return response()->json(['error' => 'Action non autorisée.'], 403);
+        }
+        if ($invoice->statut === 'paye') {
+            return response()->json(['error' => 'Cette facture est déjà payée.'], 422);
+        }
+
+        $callbackUrl = env('APP_URL') . '/api/webhooks/fedapay';
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . env('FEDAPAY_SECRET_KEY')
+        ])->post('https://api.fedapay.com/v1/transactions', [
+            'amount' => $invoice->montant,
+            'currency' => 'XOF',
+            'description' => 'Facture #' . $invoice->numero,
+            'callback_url' => $callbackUrl,
+            'metadata' => ['invoice_id' => $invoice->id]
+        ]);
+
+        if ($response->failed()) {
+            return response()->json(['error' => 'Erreur de communication avec FedaPay.'], 500);
+        }
+
+        return response()->json(['payment_url' => $response->json()['url']]);
+    }
+
     public function simulatePayment(Request $request)
     {
         $request->validate(['invoice_id' => 'required|exists:invoices,id']);
@@ -28,8 +59,6 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Cette facture est déjà payée.'], 422);
         }
 
-        // --- Simulation : on reproduit exactement le code du webhook ---
-
         $invoice->statut = 'paye';
         $invoice->save();
 
@@ -41,9 +70,7 @@ class PaymentController extends Controller
             'reference_fedapay' => 'SIM-' . uniqid()
         ]);
 
-        // Si c'est un abonnement, génération de licence et clé
         if ($invoice->type === 'abonnement') {
-            // Récupérer l'abonnement actif créé lors de la souscription
             $subscription = Subscription::where('client_id', $invoice->client_id)
                                         ->where('statut', 'active')
                                         ->latest()
@@ -59,18 +86,15 @@ class PaymentController extends Controller
                     'duree' => $subscription->license->duree,
                     'prix' => $subscription->license->prix
                 ]);
-                // Mise à jour de l'abonnement avec la nouvelle licence
                 $subscription->license_id = $license->id;
                 $subscription->save();
 
-                // Lier la facture à l'abonnement et y stocker la clé
                 $invoice->cle_acces = $uniqueKey;
-                $invoice->subscription_id = $subscription->id;  // <-- AJOUT CAPITAL
+                $invoice->subscription_id = $subscription->id;
                 $invoice->save();
             }
         }
 
-        // Notification client
         Notification::create([
             'user_id' => $invoice->client->user_id,
             'message' => "Paiement simulé confirmé pour la facture {$invoice->numero}.",
@@ -85,7 +109,6 @@ class PaymentController extends Controller
     {
         $payload = $request->all();
 
-        // Vérification de base du statut (pour la production, vous devez vérifier la signature HMAC)
         if (isset($payload['status']) && $payload['status'] === 'completed') {
             $invoice = Invoice::findOrFail($payload['metadata']['invoice_id']);
             if ($invoice->statut === 'paye') {
@@ -95,7 +118,6 @@ class PaymentController extends Controller
             $invoice->statut = 'paye';
             $invoice->save();
 
-            // Enregistrement du paiement
             Payment::create([
                 'invoice_id' => $invoice->id,
                 'montant' => $invoice->montant,
@@ -104,7 +126,6 @@ class PaymentController extends Controller
                 'reference_fedapay' => $payload['id'] ?? null
             ]);
 
-            // Si c'est un abonnement, on crée la licence
             if ($invoice->type === 'abonnement') {
                 $subscription = Subscription::where('client_id', $invoice->client_id)
                                             ->where('statut', 'active')
@@ -112,7 +133,6 @@ class PaymentController extends Controller
                                             ->first();
 
                 if ($subscription) {
-                    // Génération de la clé de licence
                     $uniqueKey = Str::uuid();
                     $license = License::create([
                         'software_id' => $subscription->license->software_id,
@@ -123,31 +143,19 @@ class PaymentController extends Controller
                         'prix' => $subscription->license->prix
                     ]);
 
-                    // Mise à jour de l'abonnement avec la nouvelle licence
                     $subscription->license_id = $license->id;
                     $subscription->save();
 
-                    // La clé d'accès est stockée dans la facture (chiffrée via le modèle)
                     $invoice->cle_acces = $uniqueKey;
                     $invoice->save();
                 }
             }
 
-            // Notification au client
             Notification::create([
                 'user_id' => $invoice->client->user->id,
                 'message' => "Paiement confirmé pour la facture {$invoice->numero}.",
                 'date_envoi' => now(),
                 'lu' => false
-            ]);
-            // Dans handleWebhook, après validation du paiement
-            $license = License::create([
-                'software_id' => $subscription->license->software_id,
-                'key' => $uniqueKey,
-                'status' => 'active', // On force 'active' car le paiement est confirmé
-                'type' => $subscription->license->type,
-                'duree' => $subscription->license->duree,
-                'prix' => $subscription->license->prix
             ]);
 
             return response('Webhook traité avec succès', 200);

@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Models\Notification;
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -29,28 +30,62 @@ class QuoteController extends Controller
 
     public function store(Request $request)
     {
-        if (!Auth::user()->client) {
-            \App\Models\Client::create([
-                'user_id' => Auth::id(),
-                'nom_entreprise' => 'Client ' . Auth::user()->nom,
-                'numero_client' => 'CLI-' . uniqid(),
-                'date_inscription' => now()
+        $user = Auth::user();
+
+        // Si c'est un client, on crée automatiquement son profil client si nécessaire
+        if ($user->role === 'client') {
+            if (!$user->client) {
+                Client::create([
+                    'user_id' => $user->id,
+                    'nom_entreprise' => 'Client ' . $user->prenom . ' ' . $user->nom,
+                    'numero_client' => 'CLI-' . strtoupper(uniqid()),
+                    'date_inscription' => now()
+                ]);
+                $user->load('client');
+            }
+
+            $request->validate([
+                'besoins' => 'required|string',
+                'fonctionnalites' => 'required|array',
+                'montant' => 'nullable|numeric'
             ]);
-        }
-        $client_id = Auth::user()->client->id;
-        // Sécurité manuelle : seul le Chef de Projet est autorisé à créer un devis
-        if (Auth::user()->role !== 'chef_projet') {
-            return response()->json(['message' => 'Accès refusé. Seul le Chef de Projet peut créer un devis.'], 403);
+
+            $quote = Quote::create([
+                'client_id' => $user->client->id,
+                'besoins' => $request->besoins,
+                'fonctionnalites' => $request->fonctionnalites,
+                'montant' => $request->montant ?? 0,
+                'statut' => 'en_attente'
+            ]);
+
+            // Notification au chef de projet
+            foreach (User::where('role', 'chef_projet')->get() as $chef) {
+                Notification::create([
+                    'user_id' => $chef->id,
+                    'message' => "Nouvelle demande de devis de {$user->prenom} {$user->nom}.",
+                    'date_envoi' => now(),
+                    'lu' => false
+                ]);
+            }
+
+            return response()->json($quote, 201);
         }
 
-        $request->validate([
-            'client_id' => 'required|exists:clients,id',
-            'besoins' => 'required|string',
-            'fonctionnalites' => 'required|array',
-            'montant' => 'required|numeric'
-        ]);
-        $quote = Quote::create($request->all() + ['statut' => 'en_attente']);
-        return response()->json($quote, 201);
+        // Pour un chef de projet, il doit fournir un client_id
+        if ($user->role === 'chef_projet') {
+            $request->validate([
+                'client_id' => 'required|exists:clients,id',
+                'besoins' => 'required|string',
+                'fonctionnalites' => 'required|array',
+                'montant' => 'required|numeric'
+            ]);
+
+            $quote = Quote::create($request->all() + ['statut' => 'en_attente']);
+            return response()->json($quote, 201);
+        }
+
+        // Autres rôles : refus
+        return response()->json(['message' => 'Accès refusé.'], 403);
     }
 
     public function update(Request $request, Quote $quote)
@@ -115,11 +150,11 @@ class QuoteController extends Controller
         $project = Project::create([
             'client_id' => $quote->client_id,
             'nom' => 'Projet ' . $quote->client->nom_entreprise,
-            'description' => $quote->besoins, // ← AJOUT : reprend les besoins du devis
+            'description' => $quote->besoins,
             'statut' => 'en_cours'
         ]);
         $quote->project_id = $project->id;
-        $quote->statut = 'termine'; // ← Empêche toute nouvelle conversion
+        $quote->statut = 'termine';
         $quote->save();
 
         $invoice = Invoice::create([
@@ -145,6 +180,7 @@ class QuoteController extends Controller
             'invoice' => $invoice
         ]);
     }
+
     public function rejectQuote($id)
     {
         $quote = Quote::findOrFail($id);
@@ -158,7 +194,6 @@ class QuoteController extends Controller
         $quote->statut = 'refuse';
         $quote->save();
 
-        // Notification aux chefs de projet
         foreach (User::where('role', 'chef_projet')->get() as $chef) {
             Notification::create([
                 'user_id' => $chef->id,

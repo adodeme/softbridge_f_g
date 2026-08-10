@@ -29,6 +29,15 @@ class QuoteController extends Controller
 
     public function store(Request $request)
     {
+        if (!Auth::user()->client) {
+            \App\Models\Client::create([
+                'user_id' => Auth::id(),
+                'nom_entreprise' => 'Client ' . Auth::user()->nom,
+                'numero_client' => 'CLI-' . uniqid(),
+                'date_inscription' => now()
+            ]);
+        }
+        $client_id = Auth::user()->client->id;
         // Sécurité manuelle : seul le Chef de Projet est autorisé à créer un devis
         if (Auth::user()->role !== 'chef_projet') {
             return response()->json(['message' => 'Accès refusé. Seul le Chef de Projet peut créer un devis.'], 403);

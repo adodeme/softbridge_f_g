@@ -86,4 +86,25 @@ class GmailApiService
 
         return rtrim(strtr(base64_encode($message), '+/', '-_'), '=');
     }
+        /**
+     * Envoyer un email simple (sujet + corps).
+     */
+    public function sendEmail(string $toEmail, string $subject, string $body): void
+    {
+        $rawMessage = $this->createMimeMessage($toEmail, $subject, $body);
+
+        $accessToken = $this->getAccessToken();
+
+        $response = Http::withToken($accessToken)
+            ->asJson()
+            ->post('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', [
+                'raw' => $rawMessage,
+            ]);
+
+        if ($response->failed()) {
+            $errorBody = $response->body();
+            Log::error('Échec de l\'envoi Gmail (OTP): ' . $errorBody);
+            throw new \Exception('Gmail API error: ' . $errorBody);
+        }
+    }
 }

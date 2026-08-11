@@ -4,8 +4,6 @@ namespace App\Services;
 
 use App\Models\Otp;
 use App\Models\User;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\OtpMail;
 use Carbon\Carbon;
 
 class OtpService
@@ -13,9 +11,16 @@ class OtpService
     const MAX_ATTEMPTS = 5;
     const VALIDITY_MINUTES = 2;
 
+    protected $gmailService;
+
+    public function __construct(GmailApiService $gmailService)
+    {
+        $this->gmailService = $gmailService;
+    }
+
     public function generate(User $user): Otp
     {
-        // Invalider tous les anciens OTP non utilisés
+        // Invalider les anciens OTP non utilisés
         Otp::where('user_id', $user->id)
             ->whereNull('used_at')
             ->update(['used_at' => now()]);
@@ -29,7 +34,10 @@ class OtpService
             'expires_at' => $expiresAt,
         ]);
 
-        Mail::to($user->email)->send(new OtpMail($code));
+        // Envoyer l'email via l'API Gmail
+        $subject = 'Votre code de vérification SoftBridge';
+        $body = "Votre code OTP est : $code\nIl expire dans 2 minutes.";
+        $this->gmailService->sendEmail($user->email, $subject, $body);
 
         return $otp;
     }

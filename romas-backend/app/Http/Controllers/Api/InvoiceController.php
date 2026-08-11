@@ -26,8 +26,12 @@ class InvoiceController extends Controller
 
     public function downloadPdf($id)
     {
-        $invoice = Invoice::with('client.user', 'project')->findOrFail($id);
-        $pdf = Pdf::loadView('pdf.invoice', ['invoice' => $invoice]);
+        $invoice = Invoice::with(['client.user', 'project.quote', 'subscription.license.software'])
+        ->findOrFail($id);
+
+        $view = $invoice->type === 'abonnement' ? 'pdf.invoice-abonnement' : 'pdf.invoice-devis';
+
+        $pdf = Pdf::loadView($view, ['invoice' => $invoice]);
         return $pdf->download('facture_' . $invoice->numero . '.pdf');
     }
     public function all()

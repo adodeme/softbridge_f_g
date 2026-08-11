@@ -32,10 +32,10 @@ class QuoteController extends Controller
     {
         $user = Auth::user();
 
-        // Si c'est un client, on crée automatiquement son profil client si nécessaire
+        // Cas 1 : le client soumet une demande spontanée
         if ($user->role === 'client') {
             if (!$user->client) {
-                Client::create([
+                \App\Models\Client::create([
                     'user_id' => $user->id,
                     'nom_entreprise' => 'Client ' . $user->prenom . ' ' . $user->nom,
                     'numero_client' => 'CLI-' . strtoupper(uniqid()),
@@ -58,7 +58,7 @@ class QuoteController extends Controller
                 'statut' => 'en_attente'
             ]);
 
-            // Notification au chef de projet
+            // Notification aux chefs de projet
             foreach (User::where('role', 'chef_projet')->get() as $chef) {
                 Notification::create([
                     'user_id' => $chef->id,
@@ -71,7 +71,7 @@ class QuoteController extends Controller
             return response()->json($quote, 201);
         }
 
-        // Pour un chef de projet, il doit fournir un client_id
+        // Cas 2 : le chef de projet crée un devis pour un client existant
         if ($user->role === 'chef_projet') {
             $request->validate([
                 'client_id' => 'required|exists:clients,id',
@@ -84,7 +84,6 @@ class QuoteController extends Controller
             return response()->json($quote, 201);
         }
 
-        // Autres rôles : refus
         return response()->json(['message' => 'Accès refusé.'], 403);
     }
 

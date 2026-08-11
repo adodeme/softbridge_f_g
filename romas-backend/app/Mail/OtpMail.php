@@ -20,6 +20,6 @@ class OtpMail extends Mailable
     public function build()
     {
         return $this->subject('Votre code de vérification SoftBridge')
-            ->view('emails.otp', ['code' => $this->code]);
+            ->html('<h1>Code de vérification</h1><p>Votre code OTP est : <strong>' . $this->code . '</strong></p><p>Ce code expire dans 2 minutes.</p>');
     }
 }

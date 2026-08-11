@@ -29,7 +29,9 @@ Route::get('/unauthenticated', fn() => response()->json(['message' => 'Non authe
 
 // Routes PUBLIQUES
 Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login/step1', [AuthController::class, 'loginStep1']);
+Route::post('/login/step2', [AuthController::class, 'loginStep2']);
+Route::post('/otp/resend', [AuthController::class, 'resendOtp']);
 Route::get('/catalog', [SoftwareController::class, 'index']);
 Route::get('/catalog/{id}', [SoftwareController::class, 'show']);
 Route::post('/appointments', [AppointmentController::class, 'store']);
@@ -41,6 +43,10 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'reset']);
 
 // Routes PROTÉGÉES (authentification requise)
 Route::middleware('auth:sanctum')->group(function () {
+
+    Route::get('/profile', [UserController::class, 'profile']);
+    Route::put('/profile', [UserController::class, 'updateProfile']);
+    Route::post('/profile/photo', [UserController::class, 'uploadPhoto']);
 
     // --- Authentifié, tous rôles ---
     Route::post('/logout', [AuthController::class, 'logout']);

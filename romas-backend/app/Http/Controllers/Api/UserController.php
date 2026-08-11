@@ -45,4 +45,42 @@ class UserController extends Controller
     }
 
     public function destroy(User $user) { $user->delete(); return response()->json(['message' => 'Utilisateur supprimé.']); }
+    // Obtenir le profil complet
+    public function profile()
+    {
+        $user = Auth::user()->load('client');
+        return response()->json($user);
+    }
+
+    // Mettre à jour les informations
+    public function updateProfile(Request $request)
+    {
+        $user = Auth::user();
+        $request->validate([
+            'nom' => 'string',
+            'prenom' => 'string',
+            'telephone' => 'nullable|string',
+            'email' => 'email|unique:users,email,' . $user->id,
+        ]);
+        $user->update($request->only(['nom', 'prenom', 'email', 'telephone']));
+        return response()->json($user);
+    }
+
+    // Uploader la photo de profil (via Cloudinary)
+    public function uploadPhoto(Request $request)
+    {
+        $request->validate(['photo' => 'required|image|max:2048']);
+        $user = Auth::user();
+
+        // Upload vers Cloudinary
+        $cloudinary = new Cloudinary(env('CLOUDINARY_URL'));
+        $uploadResult = $cloudinary->uploadApi()->upload(
+            $request->file('photo')->getRealPath(),
+            ['folder' => 'softbridge/profiles']
+        );
+        $user->photo = $uploadResult['secure_url'];
+        $user->save();
+
+        return response()->json(['photo' => $user->photo]);
+    }
 }

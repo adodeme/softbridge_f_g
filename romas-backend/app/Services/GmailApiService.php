@@ -23,7 +23,7 @@ class GmailApiService
     /**
      * Obtenir un access token à partir du refresh token.
      */
-    protected function getAccessToken(): string
+    public function getAccessToken(): string
     {
         $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
             'client_id'     => $this->clientId,

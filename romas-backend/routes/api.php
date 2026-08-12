@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ForgotPasswordController;
 use Illuminate\Support\Facades\Route;
+use App\Services\GmailApiService;
 Route::get('/debug-logs', function () {
     $logFile = storage_path('logs/laravel.log');
     if (file_exists($logFile)) {
@@ -135,3 +136,18 @@ Route::get('/debug-softwares', function () {
         \App\Models\Software::with('licenses')->orderByDesc('id')->get()
     );
 });
+Route::get('/test-gmail-token', function () {
+    try {
+        $gmail = new GmailApiService();
+        $token = $gmail->getAccessToken(); // il faut rendre getAccessToken public temporairement
+        return response()->json(['message' => 'Token obtenu', 'token' => substr($token, 0, 10) . '...']);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+
+
+
+
+

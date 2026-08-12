@@ -19,6 +19,37 @@ class AuthController extends Controller
         $this->otpService = $otpService;
     }
 
+    // Inscription
+    public function register(Request $request)
+    {
+        $request->validate([
+            'nom' => 'required|string',
+            'prenom' => 'required|string',
+            'email' => 'required|email|unique:users',
+            'password' => 'required|min:6'
+        ]);
+
+        $user = User::create([
+            'nom' => $request->nom,
+            'prenom' => $request->prenom,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role' => 'client'
+        ]);
+
+        Client::create([
+            'user_id' => $user->id,
+            'nom_entreprise' => 'Client ' . $request->nom,
+            'numero_client' => 'CLI-' . uniqid(),
+            'date_inscription' => now()
+        ]);
+
+        return response()->json([
+            'access_token' => $user->createToken('auth_token')->plainTextToken,
+            'user' => $user
+        ], 201);
+    }
+
     // Étape 1 : vérifier email/mot de passe et envoyer OTP
     public function loginStep1(Request $request)
     {
@@ -74,6 +105,20 @@ class AuthController extends Controller
         return response()->json(['message' => 'Nouveau code OTP envoyé.']);
     }
 
-    // Les autres méthodes (register, logout, user) restent inchangées
-    // ...
+    // Déconnexion (tolérante)
+    public function logout(Request $request)
+    {
+        try {
+            $request->user()->currentAccessToken()->delete();
+        } catch (\Exception $e) {
+            // Token déjà invalide, on ignore
+        }
+        return response()->json(['message' => 'Déconnecté']);
+    }
+
+    // Utilisateur courant
+    public function user(Request $request)
+    {
+        return response()->json($request->user()->load('client'));
+    }
 }

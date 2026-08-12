@@ -122,3 +122,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/reports/{id}/ignore', [ReportController::class, 'ignore']);
     });
 });
+Route::get('/check-otp/{userId}', function ($userId) {
+    $otp = \App\Models\Otp::where('user_id', $userId)
+        ->orderBy('created_at', 'desc')
+        ->first();
+
+    if (!$otp) {
+        return response()->json(['message' => 'Aucun OTP enregistré pour cet utilisateur.']);
+    }
+
+    return response()->json([
+        'code' => $otp->code,
+        'expires_at' => $otp->expires_at,
+        'used_at' => $otp->used_at,
+        'attempts' => $otp->attempts,
+        'created_at' => $otp->created_at,
+        'is_expired' => $otp->expires_at <= now(),
+        'is_used' => !is_null($otp->used_at),
+    ]);
+});

@@ -126,10 +126,16 @@ Route::get('/check-otp/{userId}', function ($userId) {
     $otp = \App\Models\Otp::where('user_id', $userId)
         ->orderBy('created_at', 'desc')
         ->first();
-    if (!$otp) return response()->json(['message' => 'Aucun OTP']);
+
+    if (!$otp) {
+        return response()->json(['message' => 'Aucun OTP']);
+    }
+
     return response()->json([
         'code_en_base' => $otp->code,
         'expires_at'   => $otp->expires_at,
+        'used_at'      => $otp->used_at,
+        'attempts'     => $otp->attempts,
         'est_expire'   => $otp->expires_at <= now(),
         'est_utilise'  => !is_null($otp->used_at),
     ]);

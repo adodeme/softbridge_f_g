@@ -20,7 +20,6 @@ class OtpService
 
     public function generate(User $user): Otp
     {
-        // Invalider les anciens OTP non utilisés
         Otp::where('user_id', $user->id)
             ->whereNull('used_at')
             ->update(['used_at' => now()]);
@@ -34,7 +33,6 @@ class OtpService
             'expires_at' => $expiresAt,
         ]);
 
-        // Envoyer l'email via l'API Gmail
         $subject = 'Votre code de vérification SoftBridge';
         $body = "Votre code OTP est : $code\nIl expire dans 2 minutes.";
         $this->gmailService->sendEmail($user->email, $subject, $body);
@@ -68,7 +66,6 @@ class OtpService
             return ['valid' => false, 'message' => 'Le code a expiré.'];
         }
 
-        // OTP correct
         $otp->used_at = now();
         $otp->save();
         return ['valid' => true];

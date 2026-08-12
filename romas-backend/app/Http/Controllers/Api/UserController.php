@@ -50,7 +50,13 @@ class UserController extends Controller
 
     public function profile()
     {
-        $user = Auth::user()->load('client');
+        $user = Auth::user();
+
+        // Charger le profil client uniquement si l'utilisateur est un client
+        if ($user->role === 'client') {
+            $user->load('client');
+        }
+
         return response()->json($user);
     }
 

@@ -12,9 +12,16 @@ use App\Notifications\ResetPasswordNotification;
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
+    use Auditable;
 
     protected $fillable = [
-        'nom', 'prenom', 'email', 'password', 'role', 'telephone'
+        'nom',
+        'prenom',
+        'email',
+        'password',
+        'role',
+        'telephone',
+        'photo',          // ← Ajout obligatoire pour l'upload de photo de profil
     ];
 
     /**
@@ -27,20 +34,19 @@ class User extends Authenticatable
 
     /**
      * Relation personnalisée pour utiliser notre table 'notifications'.
-     * (Permet d'éviter l'erreur polymorphique par défaut de Laravel).
      */
     public function notifications()
     {
         return $this->hasMany(Notification::class);
     }
 
-        public function appointments()
+    public function appointments()
     {
         return $this->hasMany(Appointment::class);
     }
+
     public function sendPasswordResetNotification($token)
     {
         $this->notify(new ResetPasswordNotification($token));
     }
-    use Auditable;
 }

@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Kkiapay\Kkiapay;
 
 class PaymentController extends Controller
 {
@@ -131,15 +132,20 @@ class PaymentController extends Controller
 
     protected function verifyTransaction($transactionId)
     {
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . config('kkiapay.private_key'),
-            'Accept' => 'application/json',
-        ])->get(config('kkiapay.api_base') . '/api/v1/transactions/' . $transactionId);
+        $kkiapay = new Kkiapay(
+            config('kkiapay.public_key'),
+            config('kkiapay.private_key'),
+            config('kkiapay.secret_key'),
+            config('kkiapay.sandbox')
+        );
 
-        if ($response->failed()) {
+        try {
+            $transaction = $kkiapay->verifyTransaction($transactionId);
+            return $transaction->status === 'SUCCESS';
+        } catch (\Exception $e) {
+            \Log::error('Erreur Kkiapay verify: ' . $e->getMessage());
             return false;
         }
-        return $response->json()['status'] === 'SUCCESS';
     }
 
     protected function handleDevisPayment($invoiceId)
@@ -225,19 +231,21 @@ class PaymentController extends Controller
 
     public function paymentCallback(Request $request)
     {
-        // Récupérer la référence depuis la requête
-        $reference = $request->query('reference') ?? $request->input('reference');
+        $transactionId = $request->query('transaction_id') ?? $request->input('transaction_id');
 
-        if (!$reference) {
-            return redirect('/')->with('error', 'Référence de paiement manquante.');
+        if (!$transactionId) {
+            return redirect('/dashboard/client/accueil')->with('error', 'Référence de transaction manquante.');
         }
 
-        // Vérification manuelle de la transaction
-        $verified = $this->verifyTransaction($reference);
-        $transaction = Transaction::where('reference', $reference)->first();
+        $transaction = Transaction::where('reference', $transactionId)->first();
 
-        if ($verified && $transaction && $transaction->status !== 'reussie') {
-            // Mettre à jour le statut et traiter le paiement
+        if (!$transaction) {
+            return redirect('/dashboard/client/accueil')->with('error', 'Transaction introuvable.');
+        }
+
+        $verified = $this->verifyTransaction($transactionId);
+
+        if ($verified && $transaction->status !== 'reussie') {
             $transaction->status = 'reussie';
             $transaction->save();
 
@@ -247,8 +255,10 @@ class PaymentController extends Controller
             } else {
                 $this->handleAbonnementPayment($metadata['invoice_id'], $metadata['subscription_id']);
             }
+
+            return redirect('/dashboard/client/accueil')->with('success', 'Paiement confirmé.');
         }
 
-        return redirect('/dashboard/client/accueil')->with('status', 'Paiement vérifié.');
+        return redirect('/dashboard/client/accueil')->with('error', 'Paiement non confirmé.');
     }
 }

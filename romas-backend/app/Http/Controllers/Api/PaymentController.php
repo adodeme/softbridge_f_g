@@ -212,8 +212,13 @@ class PaymentController extends Controller
     public function showPaymentPage($reference)
     {
         $transaction = Transaction::where('reference', $reference)->firstOrFail();
+
         $publicKey = config('kkiapay.public_key');
         $sandbox = config('kkiapay.sandbox') ? 'true' : 'false';
+
+        if (empty($publicKey)) {
+            return response('Clé publique Kkiapay manquante. Vérifiez KKIAPAY_PUBLIC_KEY.', 500);
+        }
 
         return view('paiement.kkiapay', compact('transaction', 'publicKey', 'sandbox'));
     }

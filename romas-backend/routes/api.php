@@ -107,7 +107,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/quotes/{id}/reject', [QuoteController::class, 'rejectQuote']);
         Route::post('/subscriptions', [SubscriptionController::class, 'store']);
         Route::get('/subscriptions', [SubscriptionController::class, 'index']);
-        Route::post('/payments/simulate', [PaymentController::class, 'simulatePayment']);
         Route::post('/payments/initiate', [PaymentController::class, 'initiate']);
         Route::get('/invoices', [InvoiceController::class, 'index']); // factures du client connecté
         Route::post('/software/verify-key', [SoftwareController::class, 'verifyKey']);

@@ -19,11 +19,7 @@ class PaymentController extends Controller
     // Initier un paiement pour un devis ou un abonnement
     public function initiate(Request $request)
     {
-        $request->validate([
-            'type' => 'required|in:devis,abonnement',
-            'id' => 'required|integer',
-        ]);
-
+        $request->validate(['invoice_id' => 'required|exists:invoices,id']);
         $user = Auth::user();
         $client = $user->client;
 
@@ -31,41 +27,44 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Profil client introuvable.'], 403);
         }
 
-        if ($request->type === 'devis') {
-            $invoice = Invoice::where('id', $request->id)
-                ->where('client_id', $client->id)
-                ->where('type', 'devis')
-                ->where('statut', 'impaye')
-                ->firstOrFail();
-            $amount = $invoice->montant;
-            $metadata = ['invoice_id' => $invoice->id, 'type' => 'devis'];
-            $transactable = $invoice;
-        } else { // abonnement
-            $subscription = Subscription::where('id', $request->id)
-                ->where('client_id', $client->id)
-                ->where('statut', 'active')
-                ->firstOrFail();
-            $invoice = Invoice::where('subscription_id', $subscription->id)
-                ->where('statut', 'impaye')
-                ->firstOrFail();
-            $amount = $invoice->montant;
-            $metadata = ['invoice_id' => $invoice->id, 'type' => 'abonnement', 'subscription_id' => $subscription->id];
-            $transactable = $subscription;
+        $invoice = Invoice::where('id', $request->invoice_id)
+            ->where('client_id', $client->id)
+            ->first();
+
+        if (!$invoice) {
+            return response()->json(['error' => 'Facture introuvable.'], 404);
         }
 
-        // Créer une transaction locale en attente
+        if ($invoice->statut === 'paye') {
+            return response()->json(['error' => 'Cette facture est déjà payée.'], 422);
+        }
+
+        // Préparation des métadonnées selon le type
+        $metadata = [
+            'invoice_id' => $invoice->id,
+            'type' => $invoice->type,
+        ];
+
+        if ($invoice->type === 'abonnement' && $invoice->subscription_id) {
+            $metadata['subscription_id'] = $invoice->subscription_id;
+        }
+
+        // Création de la transaction locale
         $transaction = Transaction::create([
             'client_id' => $client->id,
-            'transactable_type' => get_class($transactable),
-            'transactable_id' => $transactable->id,
-            'reference' => Str::uuid(),
-            'amount' => $amount,
+            'transactable_type' => $invoice->type === 'devis' ? Invoice::class : Subscription::class,
+            'transactable_id' => $invoice->type === 'devis' ? $invoice->id : $invoice->subscription_id,
+            'reference' => (string) Str::uuid(),
+            'amount' => $invoice->montant,
             'status' => 'en_attente',
             'metadata' => $metadata,
         ]);
 
+        // URL de paiement (à adapter selon votre route)
+        $paymentUrl = route('kkiapay.pay', ['reference' => $transaction->reference]);
+
         return response()->json([
-            'payment_url' => route('kkiapay.pay', ['transaction' => $transaction->reference]),
+            'payment_url' => $paymentUrl,
             'transaction_reference' => $transaction->reference,
         ]);
     }

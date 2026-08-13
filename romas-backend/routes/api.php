@@ -44,7 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Authentifié, tous rôles
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
-    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/{id}/mark-read', [NotificationController::class, 'markOneAsRead']);
     Route::post('/notifications/mark-read', [NotificationController::class, 'markAsRead']);
     Route::get('/appointments', [AppointmentController::class, 'index']);
 
@@ -121,22 +121,4 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/{id}/download', [ReportController::class, 'downloadPdf']);
         Route::post('/reports/{id}/ignore', [ReportController::class, 'ignore']);
     });
-});
-Route::get('/check-otp/{userId}', function ($userId) {
-    $otp = \App\Models\Otp::where('user_id', $userId)
-        ->orderBy('created_at', 'desc')
-        ->first();
-
-    if (!$otp) {
-        return response()->json(['message' => 'Aucun OTP']);
-    }
-
-    return response()->json([
-        'code_en_base' => $otp->code,
-        'expires_at'   => $otp->expires_at,
-        'used_at'      => $otp->used_at,
-        'attempts'     => $otp->attempts,
-        'est_expire'   => $otp->expires_at <= now(),
-        'est_utilise'  => !is_null($otp->used_at),
-    ]);
 });

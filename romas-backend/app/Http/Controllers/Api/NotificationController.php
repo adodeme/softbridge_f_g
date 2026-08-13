@@ -12,9 +12,11 @@ class NotificationController extends Controller
     {
         return response()->json(Auth::user()->notifications()->orderBy('created_at', 'desc')->get());
     }
-    public function markAsRead()
+    public function markOneAsRead($id)
     {
-        Auth::user()->notifications()->where('lu', false)->update(['lu' => true]);
-        return response()->json(['message' => 'Toutes les notifications ont été marquées comme lues.']);
+        $notification = Auth::user()->notifications()->findOrFail($id);
+        $notification->lu = true;
+        $notification->save();
+        return response()->json(['message' => 'Notification marquée comme lue.']);
     }
 }

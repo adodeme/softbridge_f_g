@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/notifications/{id}/mark-read', [NotificationController::class, 'markOneAsRead']);
     Route::post('/notifications/mark-read', [NotificationController::class, 'markAsRead']);
+    Route::get('/notifications', [NotificationController::class, 'index']);
     Route::get('/appointments', [AppointmentController::class, 'index']);
 
     // Projets (lecture)
@@ -107,6 +108,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/subscriptions', [SubscriptionController::class, 'store']);
         Route::get('/subscriptions', [SubscriptionController::class, 'index']);
         Route::post('/payments/simulate', [PaymentController::class, 'simulatePayment']);
+        Route::post('/payments/initiate', [PaymentController::class, 'initiate']);
         Route::get('/invoices', [InvoiceController::class, 'index']); // factures du client connecté
         Route::post('/software/verify-key', [SoftwareController::class, 'verifyKey']);
     });

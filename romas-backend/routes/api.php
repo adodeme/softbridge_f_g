@@ -33,6 +33,8 @@ Route::post('/webhooks/fedapay', [PaymentController::class, 'handleWebhook']);
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'reset']);
 
+Route::post('/kkiapay/webhook', [PaymentController::class, 'handleWebhook']);
+
 // Routes PROTÉGÉES (authentification requise)
 Route::middleware('auth:sanctum')->group(function () {
 

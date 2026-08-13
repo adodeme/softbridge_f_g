@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use App\Http\Controllers\PaymentController;
+
 
 Route::get('/', function () {
     return view('welcome');
@@ -47,3 +49,5 @@ Route::get('/auth/google/callback', function (Request $request) {
 
     return 'Refresh token : ' . $refreshToken;
 });
+Route::get('/paiement/{reference}', [PaymentController::class, 'showPaymentPage'])->name('kkiapay.pay');
+Route::get('/paiement/callback', [PaymentController::class, 'paymentCallback'])->name('kkiapay.callback');

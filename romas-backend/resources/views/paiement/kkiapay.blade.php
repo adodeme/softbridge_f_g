@@ -22,7 +22,6 @@
         });
 
         window.addEventListener('kkiapay:success', function(e) {
-            // Rediriger vers une page de vérification
             window.location.href = "{{ route('kkiapay.callback') }}?reference={{ $transaction->reference }}";
         });
     </script>

@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\Api\PaymentController;
 
 
 Route::get('/', function () {

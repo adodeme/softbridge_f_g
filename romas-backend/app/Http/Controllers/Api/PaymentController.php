@@ -220,9 +220,30 @@ class PaymentController extends Controller
 
     public function paymentCallback(Request $request)
     {
-        // Le widget Kkiapay redirige ici après paiement
-        // Vous pouvez faire une vérification manuelle et rediriger l'utilisateur
-        $reference = $request->input('reference');
-        return redirect()->route('dashboard.client')->with('status', 'Vérification du paiement...');
+        // Récupérer la référence depuis la requête
+        $reference = $request->query('reference') ?? $request->input('reference');
+
+        if (!$reference) {
+            return redirect('/')->with('error', 'Référence de paiement manquante.');
+        }
+
+        // Vérification manuelle de la transaction
+        $verified = $this->verifyTransaction($reference);
+        $transaction = Transaction::where('reference', $reference)->first();
+
+        if ($verified && $transaction && $transaction->status !== 'reussie') {
+            // Mettre à jour le statut et traiter le paiement
+            $transaction->status = 'reussie';
+            $transaction->save();
+
+            $metadata = $transaction->metadata;
+            if ($metadata['type'] === 'devis') {
+                $this->handleDevisPayment($metadata['invoice_id']);
+            } else {
+                $this->handleAbonnementPayment($metadata['invoice_id'], $metadata['subscription_id']);
+            }
+        }
+
+        return redirect('/dashboard/client/accueil')->with('status', 'Paiement vérifié.');
     }
 }

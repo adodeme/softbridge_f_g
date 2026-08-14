@@ -11,13 +11,11 @@ use App\Models\Transaction;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Kkiapay\Kkiapay;
 
 class PaymentController extends Controller
 {
-    // Initier un paiement pour un devis ou un abonnement
     public function initiate(Request $request)
     {
         $request->validate(['invoice_id' => 'required|exists:invoices,id']);
@@ -40,7 +38,6 @@ class PaymentController extends Controller
             return response()->json(['error' => 'Cette facture est déjà payée.'], 422);
         }
 
-        // Préparation des métadonnées selon le type
         $metadata = [
             'invoice_id' => $invoice->id,
             'type' => $invoice->type,
@@ -50,7 +47,6 @@ class PaymentController extends Controller
             $metadata['subscription_id'] = $invoice->subscription_id;
         }
 
-        // Création de la transaction locale
         $transaction = Transaction::create([
             'client_id' => $client->id,
             'transactable_type' => $invoice->type === 'devis' ? Invoice::class : Subscription::class,
@@ -61,7 +57,6 @@ class PaymentController extends Controller
             'metadata' => $metadata,
         ]);
 
-        // URL de paiement (à adapter selon votre route)
         $paymentUrl = route('kkiapay.pay', ['reference' => $transaction->reference]);
 
         return response()->json([
@@ -70,13 +65,9 @@ class PaymentController extends Controller
         ]);
     }
 
-    // Webhook Kkiapay (sera appelé par Kkiapay)
     public function handleWebhook(Request $request)
     {
         $payload = $request->all();
-
-        // Vérification de la signature (optionnel mais recommandé)
-        // ... implémentez selon la doc Kkiapay
 
         if (isset($payload['status']) && $payload['status'] === 'SUCCESS') {
             $transaction = Transaction::where('reference', $payload['transactionId'])->first();
@@ -84,17 +75,14 @@ class PaymentController extends Controller
                 return response('Transaction non trouvée', 404);
             }
 
-            // Vérification supplémentaire auprès de l'API Kkiapay
             $verification = $this->verifyTransaction($payload['transactionId']);
             if (!$verification) {
                 return response('Transaction invalide', 200);
             }
 
-            // Mise à jour de la transaction
             $transaction->status = 'reussie';
             $transaction->save();
 
-            // Traitement selon le type
             $metadata = $transaction->metadata;
             if ($metadata['type'] === 'devis') {
                 $this->handleDevisPayment($metadata['invoice_id']);
@@ -106,7 +94,6 @@ class PaymentController extends Controller
         return response('Webhook traité', 200);
     }
 
-    // Vérification manuelle (callback)
     public function verifyPayment(Request $request)
     {
         $transaction = Transaction::where('reference', $request->reference)->first();
@@ -118,7 +105,7 @@ class PaymentController extends Controller
         if ($verified && $transaction->status !== 'reussie') {
             $transaction->status = 'reussie';
             $transaction->save();
-            // Traitement du paiement
+
             $metadata = $transaction->metadata;
             if ($metadata['type'] === 'devis') {
                 $this->handleDevisPayment($metadata['invoice_id']);
@@ -161,7 +148,7 @@ class PaymentController extends Controller
             'montant' => $invoice->montant,
             'date_paiement' => now(),
             'methode' => 'KkiaPay',
-            'reference_fedapay' => null, // ou ID KkiaPay
+            'reference_fedapay' => null,
         ]);
 
         Notification::create([
@@ -183,7 +170,6 @@ class PaymentController extends Controller
         $subscription = Subscription::find($subscriptionId);
         if (!$subscription) return;
 
-        // Générer une licence si ce n'est pas un renouvellement (ou toujours, selon votre logique)
         $uniqueKey = Str::uuid();
         $license = License::create([
             'software_id' => $subscription->license->software_id,
@@ -215,6 +201,7 @@ class PaymentController extends Controller
             'lu' => false
         ]);
     }
+
     public function showPaymentPage($reference)
     {
         $transaction = Transaction::where('reference', $reference)->firstOrFail();
@@ -234,13 +221,13 @@ class PaymentController extends Controller
         $transactionId = $request->query('transaction_id') ?? $request->input('transaction_id');
 
         if (!$transactionId) {
-            return redirect('/dashboard/client/accueil')->with('error', 'Référence de transaction manquante.');
+            return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Référence de transaction manquante.');
         }
 
         $transaction = Transaction::where('reference', $transactionId)->first();
 
         if (!$transaction) {
-            return redirect('/dashboard/client/accueil')->with('error', 'Transaction introuvable.');
+            return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Transaction introuvable.');
         }
 
         $verified = $this->verifyTransaction($transactionId);
@@ -256,9 +243,9 @@ class PaymentController extends Controller
                 $this->handleAbonnementPayment($metadata['invoice_id'], $metadata['subscription_id']);
             }
 
-            return redirect('/dashboard/client/accueil')->with('success', 'Paiement confirmé.');
+            return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('success', 'Paiement confirmé.');
         }
 
-        return redirect('/dashboard/client/accueil')->with('error', 'Paiement non confirmé.');
+        return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Paiement non confirmé.');
     }
 }

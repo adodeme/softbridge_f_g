@@ -50,3 +50,6 @@ Route::get('/auth/google/callback', function (Request $request) {
 
     return 'Refresh token : ' . $refreshToken;
 });
+Route::get('/show-web-php', function () {
+    return response()->file(base_path('routes/web.php'));
+});

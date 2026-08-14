@@ -6,6 +6,7 @@ use App\Models\Otp;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\View;
 
 class OtpService
 {
@@ -21,7 +22,6 @@ class OtpService
 
     public function generate(User $user): Otp
     {
-        // Invalider TOUS les anciens OTP non utilisés pour cet utilisateur
         Otp::where('user_id', $user->id)
             ->whereNull('used_at')
             ->update(['used_at' => now()]);
@@ -35,9 +35,14 @@ class OtpService
             'expires_at' => $expiresAt,
         ]);
 
-        // Envoi de l'email
+        // Rendre la vue HTML de l'OTP
+        $html = View::make('emails.otp', [
+            'code' => $code,
+        ])->render();
+
+        // Envoyer via Gmail API en HTML
         try {
-            $this->gmailService->sendEmail($user->email, 'Votre code OTP SoftBridge', "Code : $code (valable 2 min)");
+            $this->gmailService->sendHtmlEmail($user->email, 'Votre code de vérification SoftBridge', $html);
         } catch (\Exception $e) {
             Log::error('Échec envoi OTP email: ' . $e->getMessage());
         }

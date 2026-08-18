@@ -67,17 +67,19 @@ class PaymentController extends Controller
 
     public function handleWebhook(Request $request)
     {
-        // Utiliser le secret du webhook
+        // Vérification de la signature HMAC
         $secret = config('kkiapay.webhook_secret');
         $signature = $request->header('X-KkiaPay-Signature');
         $payload = $request->getContent();
         $computed = hash_hmac('sha256', $payload, $secret);
 
         if (!$signature || !hash_equals($computed, $signature)) {
+            \Log::warning('Signature webhook Kkiapay invalide');
             return response('Signature invalide', 401);
         }
 
         $payload = $request->all();
+        \Log::info('Webhook Kkiapay reçu', $payload);
 
         if (isset($payload['status']) && $payload['status'] === 'SUCCESS') {
             $reference = $payload['data'] ?? null;
@@ -89,14 +91,16 @@ class PaymentController extends Controller
 
             $transaction = Transaction::where('reference', $reference)->first();
             if (!$transaction) {
+                \Log::warning("Transaction non trouvée pour référence: $reference");
                 return response('Transaction non trouvée', 404);
             }
 
-            // Enregistrer l'ID Kkiapay
             $transaction->kkiapay_transaction_id = $transactionId;
             $transaction->save();
 
             $verification = $this->verifyTransaction($transactionId);
+            \Log::info('Résultat vérification Kkiapay', ['transactionId' => $transactionId, 'verified' => $verification]);
+
             if (!$verification) {
                 return response('Transaction invalide', 200);
             }
@@ -156,15 +160,19 @@ class PaymentController extends Controller
 
     protected function verifyTransaction($transactionId)
     {
+        // Convertir le sandbox en booléen
+        $sandbox = filter_var(config('kkiapay.sandbox'), FILTER_VALIDATE_BOOLEAN);
+
         $kkiapay = new Kkiapay(
             config('kkiapay.public_key'),
             config('kkiapay.private_key'),
             config('kkiapay.secret_key'),
-            config('kkiapay.sandbox')
+            $sandbox
         );
 
         try {
             $transaction = $kkiapay->verifyTransaction($transactionId);
+            \Log::info('Réponse brute verifyTransaction', (array) $transaction);
             return $transaction->status === 'SUCCESS';
         } catch (\Exception $e) {
             \Log::error('Erreur Kkiapay verify: ' . $e->getMessage());
@@ -194,6 +202,8 @@ class PaymentController extends Controller
             'date_envoi' => now(),
             'lu' => false
         ]);
+
+        \Log::info('Facture devis payée', ['invoice_id' => $invoice->id]);
     }
 
     protected function handleAbonnementPayment($invoiceId, $subscriptionId)
@@ -237,6 +247,8 @@ class PaymentController extends Controller
             'date_envoi' => now(),
             'lu' => false
         ]);
+
+        \Log::info('Facture abonnement payée et clé générée', ['invoice_id' => $invoice->id, 'license_id' => $license->id]);
     }
 
     public function showPaymentPage($reference)
@@ -244,7 +256,7 @@ class PaymentController extends Controller
         $transaction = Transaction::where('reference', $reference)->firstOrFail();
 
         $publicKey = config('kkiapay.public_key');
-        $sandbox = config('kkiapay.sandbox') ? 'true' : 'false';
+        $sandbox = filter_var(config('kkiapay.sandbox'), FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
         $callbackUrl = route('kkiapay.callback', ['reference' => $transaction->reference]);
 
         if (empty($publicKey)) {
@@ -259,6 +271,8 @@ class PaymentController extends Controller
         $transactionId = $request->query('transaction_id');
         $reference = $request->query('reference');
 
+        \Log::info('Callback Kkiapay reçu', ['reference' => $reference, 'transaction_id' => $transactionId]);
+
         if (!$transactionId || !$reference) {
             return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Paramètres manquants.');
         }
@@ -272,6 +286,7 @@ class PaymentController extends Controller
         $transaction->save();
 
         $verified = $this->verifyTransaction($transactionId);
+        \Log::info('Résultat vérification callback', ['verified' => $verified]);
 
         if ($verified && $transaction->status !== 'reussie') {
             $transaction->status = 'reussie';

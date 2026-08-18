@@ -38,6 +38,8 @@ Route::post('/kkiapay/webhook', [PaymentController::class, 'handleWebhook']);
 // Routes PROTÉGÉES (authentification requise)
 Route::middleware('auth:sanctum')->group(function () {
 
+    Route::get('/payments/verify', [PaymentController::class, 'verifyApiPayment']);
+
     // Profil utilisateur (accessible à tous les rôles)
     Route::get('/profile', [UserController::class, 'profile']);
     Route::put('/profile', [UserController::class, 'updateProfile']);

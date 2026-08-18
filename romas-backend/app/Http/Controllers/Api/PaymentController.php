@@ -67,15 +67,34 @@ class PaymentController extends Controller
 
     public function handleWebhook(Request $request)
     {
+        $secret = config('kkiapay.secret_key');
+        $signature = $request->header('X-KkiaPay-Signature');
+        $payload = $request->getContent();
+        $computed = hash_hmac('sha256', $payload, $secret);
+
+        if (!$signature || !hash_equals($computed, $signature)) {
+            return response('Signature invalide', 401);
+        }
         $payload = $request->all();
 
         if (isset($payload['status']) && $payload['status'] === 'SUCCESS') {
-            $transaction = Transaction::where('reference', $payload['transactionId'])->first();
+            $reference = $payload['data'] ?? null;
+            $transactionId = $payload['transactionId'] ?? null;
+
+            if (!$reference || !$transactionId) {
+                return response('Paramètres manquants', 400);
+            }
+
+            $transaction = Transaction::where('reference', $reference)->first();
             if (!$transaction) {
                 return response('Transaction non trouvée', 404);
             }
 
-            $verification = $this->verifyTransaction($payload['transactionId']);
+            // Enregistrer l'ID Kkiapay
+            $transaction->kkiapay_transaction_id = $transactionId;
+            $transaction->save();
+
+            $verification = $this->verifyTransaction($transactionId);
             if (!$verification) {
                 return response('Transaction invalide', 200);
             }
@@ -89,32 +108,50 @@ class PaymentController extends Controller
             } else {
                 $this->handleAbonnementPayment($metadata['invoice_id'], $metadata['subscription_id']);
             }
+
+            return response('Webhook traité', 200);
         }
 
-        return response('Webhook traité', 200);
+        return response('Webhook ignoré', 200);
     }
 
-    public function verifyPayment(Request $request)
+    public function verifyApiPayment(Request $request)
     {
-        $transaction = Transaction::where('reference', $request->reference)->first();
-        if (!$transaction) {
-            return response()->json(['error' => 'Transaction introuvable'], 404);
+        $reference = $request->query('reference') ?? $request->input('reference');
+        if (!$reference) {
+            return response()->json(['message' => 'Référence manquante'], 400);
         }
 
-        $verified = $this->verifyTransaction($request->reference);
-        if ($verified && $transaction->status !== 'reussie') {
-            $transaction->status = 'reussie';
-            $transaction->save();
+        $transaction = Transaction::where('reference', $reference)
+            ->where('client_id', Auth::user()->client->id)
+            ->first();
 
-            $metadata = $transaction->metadata;
-            if ($metadata['type'] === 'devis') {
-                $this->handleDevisPayment($metadata['invoice_id']);
-            } else {
-                $this->handleAbonnementPayment($metadata['invoice_id'], $metadata['subscription_id']);
+        if (!$transaction) {
+            return response()->json(['message' => 'Transaction introuvable'], 404);
+        }
+
+        // Si la transaction a déjà été marquée réussie par le webhook, tout va bien
+        if ($transaction->status === 'reussie') {
+            return response()->json(['message' => 'Paiement confirmé.']);
+        }
+
+        // Sinon, si l'ID Kkiapay est disponible, on vérifie
+        if ($transaction->kkiapay_transaction_id) {
+            $verified = $this->verifyTransaction($transaction->kkiapay_transaction_id);
+            if ($verified) {
+                $transaction->status = 'reussie';
+                $transaction->save();
+                $metadata = $transaction->metadata;
+                if ($metadata['type'] === 'devis') {
+                    $this->handleDevisPayment($metadata['invoice_id']);
+                } else {
+                    $this->handleAbonnementPayment($metadata['invoice_id'], $metadata['subscription_id']);
+                }
+                return response()->json(['message' => 'Paiement confirmé.']);
             }
         }
 
-        return response()->json(['status' => $transaction->status]);
+        return response()->json(['message' => 'Paiement en attente de confirmation.'], 202);
     }
 
     protected function verifyTransaction($transactionId)
@@ -218,17 +255,21 @@ class PaymentController extends Controller
 
     public function paymentCallback(Request $request)
     {
-        $transactionId = $request->query('transaction_id') ?? $request->input('transaction_id');
+        $transactionId = $request->query('transaction_id');
+        $reference = $request->query('reference'); // notre reference si on l'a passée
 
-        if (!$transactionId) {
-            return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Référence de transaction manquante.');
+        if (!$transactionId || !$reference) {
+            return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Paramètres manquants.');
         }
 
-        $transaction = Transaction::where('reference', $transactionId)->first();
-
+        $transaction = Transaction::where('reference', $reference)->first();
         if (!$transaction) {
             return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Transaction introuvable.');
         }
+
+        // Enregistrer l'ID Kkiapay
+        $transaction->kkiapay_transaction_id = $transactionId;
+        $transaction->save();
 
         $verified = $this->verifyTransaction($transactionId);
 

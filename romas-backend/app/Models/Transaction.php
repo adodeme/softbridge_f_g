@@ -8,7 +8,7 @@ class Transaction extends Model
 {
     protected $fillable = [
         'client_id', 'transactable_type', 'transactable_id',
-        'reference', 'amount', 'currency', 'status', 'metadata'
+        'reference', 'amount', 'currency', 'status', 'metadata','kkiapay_transaction_id'
     ];
 
     protected $casts = [

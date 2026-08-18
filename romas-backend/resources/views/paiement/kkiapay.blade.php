@@ -84,9 +84,6 @@
         </p>
         <div class="amount">{{ number_format($transaction->amount, 2, ',', ' ') }} FCFA</div>
 
-        <button id="payBtn" class="btn-pay">
-            <i class="fas fa-lock mr-2"></i> Payer maintenant
-        </button>
         <div class="secure-info">
             <i class="fas fa-lock"></i> Transaction cryptée et sécurisée
         </div>

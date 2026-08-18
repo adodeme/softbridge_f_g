@@ -67,7 +67,8 @@ class PaymentController extends Controller
 
     public function handleWebhook(Request $request)
     {
-        $secret = config('kkiapay.secret_key');
+        // Utiliser le secret du webhook
+        $secret = config('kkiapay.webhook_secret');
         $signature = $request->header('X-KkiaPay-Signature');
         $payload = $request->getContent();
         $computed = hash_hmac('sha256', $payload, $secret);
@@ -75,6 +76,7 @@ class PaymentController extends Controller
         if (!$signature || !hash_equals($computed, $signature)) {
             return response('Signature invalide', 401);
         }
+
         $payload = $request->all();
 
         if (isset($payload['status']) && $payload['status'] === 'SUCCESS') {
@@ -130,12 +132,10 @@ class PaymentController extends Controller
             return response()->json(['message' => 'Transaction introuvable'], 404);
         }
 
-        // Si la transaction a déjà été marquée réussie par le webhook, tout va bien
         if ($transaction->status === 'reussie') {
             return response()->json(['message' => 'Paiement confirmé.']);
         }
 
-        // Sinon, si l'ID Kkiapay est disponible, on vérifie
         if ($transaction->kkiapay_transaction_id) {
             $verified = $this->verifyTransaction($transaction->kkiapay_transaction_id);
             if ($verified) {
@@ -257,7 +257,7 @@ class PaymentController extends Controller
     public function paymentCallback(Request $request)
     {
         $transactionId = $request->query('transaction_id');
-        $reference = $request->query('reference'); // notre reference si on l'a passée
+        $reference = $request->query('reference');
 
         if (!$transactionId || !$reference) {
             return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Paramètres manquants.');
@@ -268,7 +268,6 @@ class PaymentController extends Controller
             return redirect(config('app.frontend_url') . '/dashboard/client/accueil')->with('error', 'Transaction introuvable.');
         }
 
-        // Enregistrer l'ID Kkiapay
         $transaction->kkiapay_transaction_id = $transactionId;
         $transaction->save();
 

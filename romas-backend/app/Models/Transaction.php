@@ -7,8 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 class Transaction extends Model
 {
     protected $fillable = [
-        'client_id', 'transactable_type', 'transactable_id',
-        'reference', 'amount', 'currency', 'status', 'metadata','kkiapay_transaction_id'
+        'client_id',
+        'transactable_type',
+        'transactable_id',
+        'reference',
+        'kkiapay_transaction_id',
+        'amount',
+        'currency',
+        'status',
+        'metadata'
     ];
 
     protected $casts = [

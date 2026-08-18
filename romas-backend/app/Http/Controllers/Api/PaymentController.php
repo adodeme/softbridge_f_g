@@ -245,12 +245,13 @@ class PaymentController extends Controller
 
         $publicKey = config('kkiapay.public_key');
         $sandbox = config('kkiapay.sandbox') ? 'true' : 'false';
+        $callbackUrl = route('kkiapay.callback', ['reference' => $transaction->reference]);
 
         if (empty($publicKey)) {
             return response('Clé publique Kkiapay manquante. Vérifiez KKIAPAY_PUBLIC_KEY.', 500);
         }
 
-        return view('paiement.kkiapay', compact('transaction', 'publicKey', 'sandbox'));
+        return view('paiement.kkiapay', compact('transaction', 'publicKey', 'sandbox', 'callbackUrl'));
     }
 
     public function paymentCallback(Request $request)

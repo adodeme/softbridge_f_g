@@ -84,6 +84,9 @@
         </p>
         <div class="amount">{{ number_format($transaction->amount, 2, ',', ' ') }} FCFA</div>
 
+        <button id="payBtn" class="btn-pay">
+            <i class="fas fa-lock mr-2"></i> Payer maintenant
+        </button>
         <div class="secure-info">
             <i class="fas fa-lock"></i> Transaction cryptée et sécurisée
         </div>
@@ -93,7 +96,7 @@
             key="{{ $publicKey }}"
             sandbox="{{ $sandbox }}"
             data="{{ $transaction->reference }}"
-            callback="{{ route('kkiapay.callback') }}"
+            callback="{{ $callbackUrl }}"
         ></kkiapay-widget>
     </div>
 
@@ -107,9 +110,7 @@
             }
         });
 
-        window.addEventListener('kkiapay:success', function(e) {
-            window.location.href = "{{ route('kkiapay.callback') }}?reference={{ $transaction->reference }}";
-        });
+        // Pas besoin de forcer la redirection : le widget gère le callback via l'attribut callback.
     </script>
 
     <!-- Font Awesome pour l'icône cadenas -->

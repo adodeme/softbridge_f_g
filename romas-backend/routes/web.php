@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\PaymentController;
 // La route fixe DOIT être AVANT la route avec paramètre
 Route::get('/paiement/callback', [PaymentController::class, 'paymentCallback'])->name('kkiapay.callback');
 Route::get('/paiement/{reference}', [PaymentController::class, 'showPaymentPage'])->name('kkiapay.pay');
-
 Route::get('/', function () {
     return view('welcome');
 });
